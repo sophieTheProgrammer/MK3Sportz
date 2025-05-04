@@ -5,4 +5,4 @@ $(function (){
     });
     $("#boilerplate2").load("/components/boilerplate2.html");
     $("#gallery").load("/components/gallery.html");
-}); tha
+});
