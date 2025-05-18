@@ -1,4 +1,6 @@
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mustache@4.2.0/mustache.min.js"></script>
+
 <div id="header"></div>
 
 <div class="container mt-5">
@@ -6,7 +8,8 @@
     <div class="col-lg-8 text-center">
       <img
         src="https://t3.ftcdn.net/jpg/00/90/01/44/360_F_90014458_fR48dBcf1KuoMTJV48vTl9dGyhQ8kYqF.jpg"
-        style="height: 500px; width: auto"
+        class="img-fluid rounded shadow"
+        style="max-height: 500px; height: auto"
       />
       <br />
       <br />
@@ -21,13 +24,7 @@
       <ul class="list-unstyled">
         <li>4:00 PM – 5:30 PM</li>
       </ul>
-
-      <h5>Where:</h5>
-      <ul class="list-unstyled">
-        <li>
-          Black Mountain Middle School, 9353 Oviedo St, San Diego, CA 92129<br />
-        </li>
-      </ul>
+      <div id="location"></div>
 
       <h5>Who:</h5>
       <ul class="list-unstyled">

@@ -1,82 +1,71 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>MK3 Sportz</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-  <style>
-    .icon-circle {
-      width: 80px;
-      height: 80px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 36px;
-      margin: auto;
-    }
-    .icon-circle img {
-      width: 36px;
-      height: 36px;
-    
-    }
-  </style>
-</head>
-<body>
-
+<script src="https://cdn.jsdelivr.net/npm/mustache@4.2.0/mustache.min.js"></script>
   <div id="header"></div>
-  <div id="gallery"></div>
+  <body>
+    <div id="gallery"></div>
 
-  <div class="container mt-5 text-center">
-    <p class="lead">We are a non-profit organization fostering a fun, safe, and secure environment for students to thrive...</p>
-    <p class="lead">Mr. Floyd is an experienced player!</p>
-    <p class="lead">Where sports and fun come together!</p>
+    <div class="container mt-5 text-center">
+      <p class="lead">
+        We are a non-profit organization fostering a fun, safe, and secure
+        environment for students to thrive...
+      </p>
+      <p class="lead">Mr. Floyd is an experienced player!</p>
+      <p class="lead">Where sports and fun come together!</p>
 
-    <h2 class="mt-5 mb-4">Sports Offered</h2>
+      <h2 class="mt-5 mb-4">Sports Offered</h2>
 
-    <div class="container py-4">
-      <div class="d-flex flex-wrap justify-content-center gap-4">
-        <a href="sports/basketball.html" class="text-decoration-none text-center">
-          <div class="icon-circle bg-primary">
-            <img src = "/images/Basketball Vector Icon.svg">
-          </div>
-          <div class="mt-2 text-dark fw-medium">Basketball</div>
-        </a>
+      <div class="container py-4">
+        <div class="d-flex flex-wrap justify-content-center gap-4">
+          <a
+            href="sports/basketball.html"
+            class="text-decoration-none text-center"
+          >
+            <div class="icon-circle bg-primary">
+              <img src="/images/Basketball Vector Icon.svg" />
+            </div>
+            <div class="mt-2 text-dark fw-medium">Basketball</div>
+          </a>
 
-        <a href="sports/pickleball.html" class="text-decoration-none text-center">
-          <div class="icon-circle" style="background-color: #f4b400">
-            <img src = "/images/Pickleball Icon.svg">
-          </div>
-          <div class="mt-2 text-dark fw-medium">Pickleball</div>
-        </a>
+          <a
+            href="sports/pickleball.html"
+            class="text-decoration-none text-center"
+          >
+            <div class="icon-circle" style="background-color: #f4b400">
+              <img src="/images/Pickleball Icon.svg" />
+            </div>
+            <div class="mt-2 text-dark fw-medium">Pickleball</div>
+          </a>
 
-        <a href="sports/soccer.html" class="text-decoration-none text-center">
-          <div class="icon-circle" style="background-color: #0f9d58">
-            <img src = "/images/Soccer Ball Emoji Black.svg">
-          </div>
-          <div class="mt-2 text-dark fw-medium">Soccer</div>
-        </a>
+          <a href="sports/soccer.html" class="text-decoration-none text-center">
+            <div class="icon-circle" style="background-color: #0f9d58">
+              <img src="/images/Soccer Ball Emoji Black.svg" />
+            </div>
+            <div class="mt-2 text-dark fw-medium">Soccer</div>
+          </a>
 
-        <a href="sports/badminton.html" class="text-decoration-none text-center">
-          <div class="icon-circle" style="background-color: #ea4335">
-            <img src="https://www.freeiconspng.com/uploads/shuttlecock-icon-17.png" alt="Badminton icon from freeiconspng.com">
-          </div>
-          <div class="mt-2 text-dark fw-medium">Badminton</div>
-        </a>
+          <a
+            href="sports/badminton.html"
+            class="text-decoration-none text-center"
+          >
+            <div class="icon-circle" style="background-color: #ea4335">
+              <img
+                src="https://www.freeiconspng.com/uploads/shuttlecock-icon-17.png"
+                alt="Badminton icon from freeiconspng.com"
+              />
+            </div>
+            <div class="mt-2 text-dark fw-medium">Badminton</div>
+          </a>
+        </div>
       </div>
+
+      <h2 class="mb-4">Reviews</h2>
+      <p>"Pickleball changed my life!!!" <br /><strong>- Zoe C.</strong></p>
+      <p>"I love pickles!!!" <br /><strong>- Riley</strong></p>
+      <p>"This website is amazing!!!" <br /><strong>- Andrea</strong></p>
     </div>
 
-    <h2 class="mb-4">Reviews</h2>
-    <p>"Pickleball changed my life!!!" <br><strong>- Zoe C.</strong></p>
-    <p>"I love pickles!!!" <br><strong>- Riley</strong></p>
-    <p>"This website is amazing!!!" <br><strong>- Andrea</strong></p>
-  </div>
+    <div id="footer"></div>
 
-  <div id="footer"></div>
-
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-  <script src="/script.js"></script>
-</body>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="/script.js"></script>
+  </body>
 </html>

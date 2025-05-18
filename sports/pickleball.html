@@ -1,4 +1,6 @@
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mustache@4.2.0/mustache.min.js"></script>
+
 <div id="header"></div>
 
 <div class="container mt-5">
@@ -17,14 +19,7 @@
 
       <p><strong>When:</strong> Mondays, Tuesdays, Wednesdays & Thursdays</p>
       <p><strong>Time:</strong> 4:00 PM – 5:30 PM</p>
-      <p>
-        <strong>Where:</strong> Black Mountain Middle School, 9353 Oviedo St,
-        San Diego, CA 92129<br />
-        <small
-          >(If the location change presents a challenge, we can explore a
-          carpool option…)</small
-        >
-      </p>
+      <div id="location"></div>
       <p>
         <strong>Who:</strong> Elementary, Middle, and High School students —
         Open to all skill levels
