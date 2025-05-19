@@ -13,3 +13,6 @@
   width: 36px;
   height: 36px;
 }
+img.hero-img {
+  max-width: 500px;
+}

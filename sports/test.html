@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <link rel="icon" type="image/x-icon" href="/images/logo.png" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mustache@4.2.0/mustache.min.js"></script>
+    <link href="/styles.css" rel="stylesheet" />
+    <title>MK3 Basketball</title>
+  </head>
+  <body class="d-flex flex-column min-vh-100">
+    <div id="navbar"></div>
+    <div id="content"></div>
+    <div id="content-template" hidden class="container mt-5">
+      <div class="row justify-content-center">
+        <div class="col-lg-8 text-center">
+          <img
+            src="{{heroImg}}"
+            class="hero-img img-fluid rounded shadow"
+            style="max-height: 500px; height: auto"
+          />
+          <br /><br />
+          <h3 class="mb-4">San Diego {{sportName}} Academy</h3>
+
+          <h5>Coaching Staff:</h5>
+          <ul class="list-unstyled">
+            {{#coaches}}
+            <li>
+              {{name}} {{#favorite}} - Favorite Shot: {{favorite}}{{/favorite}}
+            </li>
+            {{/coaches}}
+          </ul>
+
+          {{#privateLessons}}
+          <h5>
+            Private Lessons ({{#coaches}}{{name}}{{^last}},
+            {{/last}}{{/coaches}}):
+          </h5>
+          <ul class="list-unstyled">
+            {{#rates}}
+            <li>
+              <strong>{{option}}:</strong> ${{hourlyRate}}/hour {{/rates}}
+              {{#schedules}}
+            </li>
+
+            <li><strong>{{day}}:</strong> {{time}} {{/schedules}}</li>
+          </ul>
+
+          {{/privateLessons}}
+        </div>
+      </div>
+    </div>
+
+    <div id="footer"></div>
+    <script src="/script.js"></script>
+  </body>
+</html>
