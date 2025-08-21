@@ -1,168 +1,160 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, shrink-to-fit=no"
-    />
-    <link rel="icon" type="image/x-icon" href="/images/logo.png" />
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mustache@4.2.0/mustache.min.js"></script>
-    <link href="/styles.css" rel="stylesheet" />
-    <title>MK3 Sportz</title>
-  </head>
-  <body class="d-flex flex-column min-vh-100">
-    <div id="navbar"></div>
-    <div class="container mt-5">
-      <div class="row justify-content-center">
-        <div class="col-lg-8 text-center">
-          <img
-            src="https://optimumbadmintonacademy.com/assets/images/news/5d83aa61620ef8dbf56bc8f5e711f536.jpg"
-            class="img-fluid rounded shadow"
-            style="max-height: 500px; height: auto"
-          />
-          <br /><br />
-          <h3 class="mb-4">San Diego Badminton Academy</h3>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <link rel="icon" type="image/x-icon" href="/images/logo.png" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mustache@4.2.0/mustache.min.js"></script>
+  <link href="/styles.css" rel="stylesheet" />
+  <title>MK3 Sportz</title>
+</head>
+<body class="d-flex flex-column min-vh-100">
+  <div id="navbar"></div>
 
-          <h5>Important Notes:</h5>
-          <ul class="list-unstyled">
-            <li>Payments are due at the beginning of each month.</li>
-            <li>
-              A 10% late fee will apply to any payments received after the 5th.
-            </li>
-            <li>Saturday practices are held at Oak Valley Middle School.</li>
-            <li>
-              Adult Group Practice begins Saturday, 5/10 – respond via email if
-              interested (all skill levels welcome).
-            </li>
-            <li>Open Play begins this Saturday, 6:30 PM – 8:30 PM.</li>
-          </ul>
+  <div class="container mt-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-8 text-center">
 
-          <h5>Coaching Staff:</h5>
-          <ul class="list-unstyled">
-            <li>Amy Lee</li>
-            <li>Oscar Liu</li>
-            <li>Chris Livelo</li>
-            <li>Niah Watson</li>
-            <li>Venice Roque</li>
-            <li>Caleb Lapp</li>
-            <li>Aidan Lee</li>
-            <li>Supported by local high school students</li>
-          </ul>
+        <!-- Header Image -->
+        <img src="https://optimumbadmintonacademy.com/assets/images/news/5d83aa61620ef8dbf56bc8f5e711f536.jpg"
+             class="img-fluid rounded shadow mb-4"
+             style="max-height: 500px; height: auto;" />
 
-          <h5>General Group Practice:</h5>
-          <ul class="list-unstyled">
-            <li>$300/month – 3 days/week</li>
-            <li>$250/month – 2 days/week</li>
-            <li>$200/month – 1 day/week</li>
-          </ul>
+        <!-- Title -->
+        <h3 class="mb-4">San Diego Badminton Academy</h3>
 
-          <h5>Practice Schedule:</h5>
-          <ul class="list-unstyled">
-            <li>
-              <strong>Wednesdays:</strong> Adobe Bluffs Elementary School, 8707
-              Adobe Bluff Dr, San Diego, CA 92129 | 6:30 PM – 8:30 PM
-            </li>
-            <li>
-              <strong>Fridays:</strong> Adobe Bluffs Elementary School, 8707
-              Adobe Bluff Dr, San Diego, CA 92129 | 6:30 PM – 8:30 PM
-            </li>
-            <li>
-              <strong>Saturdays:</strong> Oak Valley Middle School, 16055
-              Winecreek Rd, San Diego, CA 92127 | 4:30 PM – 6:30 PM
-            </li>
-          </ul>
+        <!-- Special Offer -->
+        <p class="fw-bold">Special Offer!</p>
+        <p>
+          For the month of September only, if you refer one new family to our program,
+          and they register and pay, you’ll receive <strong>50% off</strong> your next month’s payment.
+        </p>
+        <p class="fst-italic">
+          Please note: This offer applies to just one referral per person for the month of September.
+        </p>
 
-          <h5>Private Lessons (Amy Lee, Oscar Liu, Chris Livelo):</h5>
-          <ul class="list-unstyled">
-            <li>1-on-1: $120/hour</li>
-            <li>1-on-2: $160/hour</li>
-            <li><strong>Fridays:</strong> 6:30 PM – 8:30 PM</li>
-            <li><strong>Saturdays:</strong> 4:30 PM – 8:30 PM</li>
-          </ul>
+        <!-- Notes -->
+        <h5>Important Notes:</h5>
+        <ul class="list-unstyled">
+          <li>Payments are due at the beginning of each month.</li>
+          <li>A 10% late fee will apply to any payments received after the 5th.</li>
+          <li>Saturday practices are held at Oak Valley Middle School.</li>
+          <li>
+            Adult Group Practice begins Saturday, 5/10 – respond via email if interested
+            (all skill levels welcome).
+          </li>
+          <li>Open Play begins this Saturday, 6:30 PM – 8:30 PM.</li>
+        </ul>
 
-          <h5>Elite/High School Group Practice (Invite Only by Amy Lee):</h5>
-          <ul class="list-unstyled">
-            <li>
-              <strong>Fridays:</strong> 6:30 PM – 8:30 PM at Adobe Bluffs
-              Elementary
-            </li>
-            <li>
-              <strong>Saturdays:</strong> 4:30 PM – 6:30 PM at Adobe Bluffs
-              Elementary
-            </li>
-          </ul>
+        <!-- Coaching Staff -->
+        <h5>Coaching Staff:</h5>
+        <ul class="list-unstyled">
+          <li>Amy Lee</li>
+          <li>Oscar Liu</li>
+          <li>Chris Livelo</li>
+          <li>Venice Roque</li>
+          <li>Caleb Lapp</li>
+          <li>Supported by local high school students</li>
+        </ul>
 
-          <h5>Adult Group Class:</h5>
-          <ul class="list-unstyled">
-            <li><strong>Saturdays:</strong> 6:30 PM – 8:30 PM</li>
-            <li>$150/month</li>
-          </ul>
+        <!-- Schedule -->
+        <hr />
+        <h4>First Day of Practice:</h4>
+        <p>Saturday, September 6th – mark your calendars!</p>
 
-          <h5>Open Play:</h5>
-          <ul class="list-unstyled">
-            <li><strong>Time:</strong> 6:30 PM – 8:30 PM</li>
-            <li>$10 cash per person</li>
-          </ul>
+        <h5>General Group Practice</h5>
+        <p><strong>When:</strong> Saturdays<br>
+           <strong>Time:</strong> 4pm – 6pm<br>
+           <strong>Where:</strong> Del Norte High School & Canyon Crest Academy<br>
+           <strong>Who:</strong> Open to kids of all ages and skill levels</p>
 
-          <h5>Payment Instructions:</h5>
-          <ul class="list-unstyled">
-            <li>
-              <strong>Online:</strong>
-              <a
-                href="https://checkout.square.site/merchant/ML2SAWM1GJQM8/checkout/ZSFTMZCSZ4E2J6XHEAHX3DF5"
-                target="_blank"
-                class="fw-bold text-decoration-underline"
-                >CLICK HERE TO PAY</a
-              ><br />
-              Please include the participant’s full name and program name in
-              “Note to Seller”.
-            </li>
-            <li>
-              <strong>Cash:</strong> Place in envelope with full name and
-              children’s names written on it.
-            </li>
-          </ul>
+        <h5>Intermediate Group Practice</h5>
+        <p>(Qualified 7th, 8th, & 9th graders)</p>
 
-          <h5>Discounts:</h5>
-          <ul class="list-unstyled">
-            <li>10% off for the 2nd and 3rd sibling</li>
-            <li>10% Refer-A-Friend discount</li>
-          </ul>
+        <h5>Elite Group Practice</h5>
+        <p>(Qualified 8th, 9th, & Varsity Level Players)<br>
+           <strong>When:</strong> Saturdays and Sundays<br>
+           <strong>Time:</strong> 4pm – 6pm<br>
+           <strong>Where:</strong> Del Norte High School & Canyon Crest Academy</p>
 
-          <h5>Scholarships:</h5>
-          <ul class="list-unstyled">
-            <li>Available upon request and financial review</li>
-          </ul>
+        <h5>Private Lessons</h5>
+        <p><strong>When:</strong> Saturdays & Sundays<br>
+           <strong>Time:</strong> 4pm – 7pm<br>
+           <strong>Where:</strong> Del Norte High School<br>
+           <strong>Who:</strong> Open to all ages and skill levels</p>
 
-          <h5>Reminders:</h5>
-          <ul class="list-unstyled">
-            <li>Dress in comfortable athletic clothing and shoes</li>
-            <li>Bring water</li>
-            <li>Contact us with any questions</li>
-          </ul>
+        <h5>Adult Group Lessons</h5>
+        <p><strong>When:</strong> Saturdays<br>
+           <strong>Time/Location:</strong> 4:30pm – 6pm at Canyon Crest Academy<br>
+           <strong>Time/Location:</strong> 5pm – 6:30pm at Del Norte High School<br>
+           <strong>Who:</strong> Open to all skill levels</p>
 
-          <div class="mb-4">
-            <p>
-              <a
-                href="https://docs.google.com/forms/d/e/1FAIpQLSeZQzLYxd_PzV2yNkvP3-uByBAQKE4eoQf0tN_MLadq2oUG4A/viewform"
-                target="_blank"
-                class="fw-bold text-decoration-underline"
-              >
-                <h1>CLICK HERE TO REGISTER</h1>
-              </a>
-            </p>
-          </div>
-        </div>
+        <p>Interested in joining our Adult Badminton Group?<br>
+           Reply directly to this email or send us a message at
+           <a href="mailto:MK3Sportz@gmail.com">MK3Sportz@gmail.com</a>,
+           and we’ll send you the registration link and details.
+        </p>
+
+        <!-- Payment Reminder -->
+        <hr />
+        <h3>Payment Reminder</h3>
+        <p>Payments are due at the beginning of each month.<br>
+           A 10% late fee will apply to any payments received after the 5th.
+        </p>
+
+        <!-- Payment Instructions -->
+        <h4>Payment Instructions:</h4>
+        <ul>
+          <li>
+            <strong>Online Payment:</strong>
+            If you haven’t already submitted your payment,
+            <a href="https://square.link/u/pUvQOOjE" target="_blank" class="fw-bold text-warning">
+              CLICK HERE TO PAY
+            </a>
+            (Visa, Mastercard, Amex, Discover).<br>
+            <span class="text-danger">
+              At checkout, please indicate the participant’s first and last name and program
+              in the “Note to Seller” field.
+            </span>
+          </li>
+          <li>
+            <strong>Cash Payment:</strong>
+            Place cash in an envelope with your full name and your children’s names.
+          </li>
+          <li>
+            <strong>Registration:</strong>
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLSeZQzLYxd_PzV2yNkvP3-uByBAQKE4eoQf0tN_MLadq2oUG4A/viewform?usp=sf_link"
+               target="_blank" class="fw-bold text-warning">
+              CLICK HERE TO REGISTER
+            </a>
+          </li>
+        </ul>
+
+        <!-- Discounts -->
+        <hr />
+        <h3>Discounts & Scholarships</h3>
+        <ul>
+          <li><strong>Sibling Discount:</strong> 10% off for the 2nd and 3rd sibling</li>
+          <li><strong>Refer-A-Friend:</strong> 10% off — badminton is more fun with friends!</li>
+          <li><strong>Scholarships:</strong> Available upon request and financial review</li>
+        </ul>
+
+        <!-- Reminders -->
+        <hr />
+        <h3>Reminders</h3>
+        <ul class="list-unstyled">
+          <li>✔️ Wear comfortable athletic clothes & shoes</li>
+          <li>✔️ Bring plenty of water</li>
+          <li>✔️ Invite friends and family to join the fun!</li>
+        </ul>
+
       </div>
     </div>
+  </div>
 
-    <div id="footer"></div>
-    <script src="/script.js"></script>
-  </body>
+  <div id="footer"></div>
+  <script src="/script.js"></script>
+</body>
 </html>
