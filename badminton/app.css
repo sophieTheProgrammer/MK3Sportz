@@ -1,0 +1,87 @@
+:root {
+  --mk3-red: #ea4335;
+  --mk3-red-dark: #c5221f;
+  --mk3-practice: #0d6efd;
+  --mk3-tournament: #ea4335;
+}
+
+.club-bar { background: #fff; }
+.club-title { color: #212529; }
+.club-dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--mk3-red); display: inline-block; flex: none;
+}
+.club-nav { scrollbar-width: none; }
+.club-nav::-webkit-scrollbar { display: none; }
+.club-nav .nav-link { white-space: nowrap; color: #495057; }
+.club-nav .nav-link.active { color: var(--mk3-red-dark); border-bottom-color: var(--mk3-red); }
+
+.hero {
+  background: linear-gradient(135deg, var(--mk3-red) 0%, #b3261e 100%);
+  color: #fff; border-radius: 1rem;
+}
+.hero .lead { opacity: 0.95; }
+
+.btn-brand { background: var(--mk3-red); border-color: var(--mk3-red); color: #fff; }
+.btn-brand:hover, .btn-brand:focus { background: var(--mk3-red-dark); border-color: var(--mk3-red-dark); color: #fff; }
+
+.text-bg-practice { background: var(--mk3-practice) !important; color: #fff !important; }
+.text-bg-tournament { background: var(--mk3-tournament) !important; color: #fff !important; }
+
+.card-hover { transition: box-shadow .15s, transform .15s; }
+.card-hover:hover { box-shadow: 0 .5rem 1rem rgba(0,0,0,.12); transform: translateY(-2px); }
+
+.sample-tag { font-size: .7rem; letter-spacing: .02em; }
+
+/* ---------- Calendar ---------- */
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid #dee2e6; border-left: 1px solid #dee2e6; }
+.cal-dow { font-size: .75rem; font-weight: 600; text-align: center; padding: .25rem 0; background: #f8f9fa; border-right: 1px solid #dee2e6; border-bottom: 1px solid #dee2e6; }
+.cal-cell {
+  min-height: 96px; padding: .25rem; border-right: 1px solid #dee2e6; border-bottom: 1px solid #dee2e6;
+  background: #fff; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.cal-cell.other-month { background: #f8f9fa; color: #adb5bd; }
+.cal-cell.today .cal-daynum { background: var(--mk3-red); color: #fff; border-radius: 50%; }
+.cal-cell.selected { outline: 2px solid var(--mk3-red); outline-offset: -2px; }
+.cal-daynum { font-size: .8rem; width: 1.6rem; height: 1.6rem; display: inline-flex; align-items: center; justify-content: center; }
+.cal-chip {
+  display: block; width: 100%; text-align: left; border: 0; border-radius: 4px;
+  font-size: .72rem; line-height: 1.2; padding: 2px 4px; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cal-chip.practice { background: var(--mk3-practice); }
+.cal-chip.tournament { background: var(--mk3-tournament); }
+.cal-chip.cancelled { background: #adb5bd; text-decoration: line-through; }
+.cal-dots { display: none; gap: 3px; flex-wrap: wrap; }
+.cal-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.cal-dot.practice { background: var(--mk3-practice); }
+.cal-dot.tournament { background: var(--mk3-tournament); }
+.cal-dot.cancelled { background: #adb5bd; }
+
+@media (max-width: 767.98px) {
+  .cal-cell { min-height: 52px; align-items: center; }
+  .cal-chip { display: none; }
+  .cal-dots { display: flex; justify-content: center; }
+}
+
+.agenda-item { border-left: 4px solid var(--mk3-practice); }
+.agenda-item.tournament { border-left-color: var(--mk3-tournament); }
+.agenda-item.cancelled { border-left-color: #adb5bd; opacity: .75; }
+
+/* ---------- Messages ---------- */
+.convo-list .list-group-item.unread { background: #fff5f4; }
+.convo-list .list-group-item.unread .convo-subject { font-weight: 700; }
+.thread { max-height: 55vh; overflow-y: auto; }
+.bubble { max-width: 85%; padding: .5rem .75rem; border-radius: 1rem; white-space: pre-wrap; word-wrap: break-word; }
+.bubble.mine { background: var(--mk3-practice); color: #fff; margin-left: auto; border-bottom-right-radius: .25rem; }
+.bubble.theirs { background: #f1f3f5; border-bottom-left-radius: .25rem; }
+.bubble-meta { font-size: .72rem; color: #6c757d; }
+
+.private-box { background: #fff8e1; border: 1px dashed #f0b400; border-radius: .5rem; }
+.preview-frame { border: 2px dashed #adb5bd; border-radius: .75rem; }
+
+.pre-wrap { white-space: pre-wrap; }
+
+/* ---------- Admin ---------- */
+.club-nav .nav-link[data-nav="admin"]:not(.active) { color: #6f42c1; font-weight: 600; }
+.admin-section .list-group-item-action:hover { background: #fff5f4; }
