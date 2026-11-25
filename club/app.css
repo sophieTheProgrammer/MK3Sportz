@@ -1,32 +1,42 @@
+/* Academy themes. <html data-sport="..."> is set from the URL (/badminton/, /pickleball/).
+   Both academies share the brand palette from their NACU crests: magenta #882B75, black,
+   light grey #C5C8C9 and white. Override per sport with html[data-sport="..."] if needed. */
 :root {
-  --mk3-red: #ea4335;
-  --mk3-red-dark: #c5221f;
-  --mk3-practice: #0d6efd;
-  --mk3-tournament: #ea4335;
+  --club-accent: #882b75;        /* buttons, highlights (7.9:1 contrast with white) */
+  --club-accent-hover: #6d225e;
+  --club-on-accent: #fff;        /* text on the accent colour */
+  --club-accent-ink: #882b75;    /* accent used as text on white */
+  --club-hero-bg: radial-gradient(circle at 85% 25%, rgba(136, 43, 117, .55), transparent 60%), linear-gradient(135deg, #0b0b0b 0%, #2a2a2a 100%);
+  --club-hero-ink: #fff;
+  --club-tournament: #882b75;
+  --club-on-tournament: #fff;
+  --club-practice: #0d6efd;
+  --club-soft: #f7eef5;          /* tinted backgrounds */
+  --club-silver: #c5c8c9;
 }
 
 .club-bar { background: #fff; }
 .club-title { color: #212529; }
-.club-dot {
-  width: 14px; height: 14px; border-radius: 50%;
-  background: var(--mk3-red); display: inline-block; flex: none;
-}
+.club-logo { height: 44px; width: auto; flex: none; }
 .club-nav { scrollbar-width: none; }
 .club-nav::-webkit-scrollbar { display: none; }
 .club-nav .nav-link { white-space: nowrap; color: #495057; }
-.club-nav .nav-link.active { color: var(--mk3-red-dark); border-bottom-color: var(--mk3-red); }
+.club-nav .nav-link.active { color: var(--club-accent-ink); border-bottom-color: var(--club-accent); }
 
 .hero {
-  background: linear-gradient(135deg, var(--mk3-red) 0%, #b3261e 100%);
-  color: #fff; border-radius: 1rem;
+  background: var(--club-hero-bg);
+  color: var(--club-hero-ink); border-radius: 1rem;
 }
 .hero .lead { opacity: 0.95; }
+.hero-crest { width: 120px; height: auto; flex: none; }
+@media (min-width: 768px) { .hero-crest { width: 170px; } }
 
-.btn-brand { background: var(--mk3-red); border-color: var(--mk3-red); color: #fff; }
-.btn-brand:hover, .btn-brand:focus { background: var(--mk3-red-dark); border-color: var(--mk3-red-dark); color: #fff; }
+.btn-brand { background: var(--club-accent); border-color: var(--club-accent); color: var(--club-on-accent); }
+.btn-brand:hover, .btn-brand:focus { background: var(--club-accent-hover); border-color: var(--club-accent-hover); color: var(--club-on-accent); }
+.btn-brand:disabled { background: var(--club-accent); border-color: var(--club-accent); color: var(--club-on-accent); }
 
-.text-bg-practice { background: var(--mk3-practice) !important; color: #fff !important; }
-.text-bg-tournament { background: var(--mk3-tournament) !important; color: #fff !important; }
+.text-bg-practice { background: var(--club-practice) !important; color: #fff !important; }
+.text-bg-tournament { background: var(--club-tournament) !important; color: var(--club-on-tournament) !important; }
 
 .card-hover { transition: box-shadow .15s, transform .15s; }
 .card-hover:hover { box-shadow: 0 .5rem 1rem rgba(0,0,0,.12); transform: translateY(-2px); }
@@ -41,21 +51,21 @@
   background: #fff; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0;
 }
 .cal-cell.other-month { background: #f8f9fa; color: #adb5bd; }
-.cal-cell.today .cal-daynum { background: var(--mk3-red); color: #fff; border-radius: 50%; }
-.cal-cell.selected { outline: 2px solid var(--mk3-red); outline-offset: -2px; }
+.cal-cell.today .cal-daynum { background: var(--club-accent); color: var(--club-on-accent); border-radius: 50%; }
+.cal-cell.selected { outline: 2px solid var(--club-accent-ink); outline-offset: -2px; }
 .cal-daynum { font-size: .8rem; width: 1.6rem; height: 1.6rem; display: inline-flex; align-items: center; justify-content: center; }
 .cal-chip {
   display: block; width: 100%; text-align: left; border: 0; border-radius: 4px;
   font-size: .72rem; line-height: 1.2; padding: 2px 4px; color: #fff;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.cal-chip.practice { background: var(--mk3-practice); }
-.cal-chip.tournament { background: var(--mk3-tournament); }
+.cal-chip.practice { background: var(--club-practice); }
+.cal-chip.tournament { background: var(--club-tournament); color: var(--club-on-tournament); }
 .cal-chip.cancelled { background: #adb5bd; text-decoration: line-through; }
 .cal-dots { display: none; gap: 3px; flex-wrap: wrap; }
 .cal-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-.cal-dot.practice { background: var(--mk3-practice); }
-.cal-dot.tournament { background: var(--mk3-tournament); }
+.cal-dot.practice { background: var(--club-practice); }
+.cal-dot.tournament { background: var(--club-tournament); }
 .cal-dot.cancelled { background: #adb5bd; }
 
 @media (max-width: 767.98px) {
@@ -64,16 +74,16 @@
   .cal-dots { display: flex; justify-content: center; }
 }
 
-.agenda-item { border-left: 4px solid var(--mk3-practice); }
-.agenda-item.tournament { border-left-color: var(--mk3-tournament); }
+.agenda-item { border-left: 4px solid var(--club-practice); }
+.agenda-item.tournament { border-left-color: var(--club-tournament); }
 .agenda-item.cancelled { border-left-color: #adb5bd; opacity: .75; }
 
 /* ---------- Messages ---------- */
-.convo-list .list-group-item.unread { background: #fff5f4; }
+.convo-list .list-group-item.unread { background: var(--club-soft); }
 .convo-list .list-group-item.unread .convo-subject { font-weight: 700; }
 .thread { max-height: 55vh; overflow-y: auto; }
 .bubble { max-width: 85%; padding: .5rem .75rem; border-radius: 1rem; white-space: pre-wrap; word-wrap: break-word; }
-.bubble.mine { background: var(--mk3-practice); color: #fff; margin-left: auto; border-bottom-right-radius: .25rem; }
+.bubble.mine { background: var(--club-practice); color: #fff; margin-left: auto; border-bottom-right-radius: .25rem; }
 .bubble.theirs { background: #f1f3f5; border-bottom-left-radius: .25rem; }
 .bubble-meta { font-size: .72rem; color: #6c757d; }
 
@@ -84,4 +94,16 @@
 
 /* ---------- Admin ---------- */
 .club-nav .nav-link[data-nav="admin"]:not(.active) { color: #6f42c1; font-weight: 600; }
-.admin-section .list-group-item-action:hover { background: #fff5f4; }
+.admin-section .list-group-item-action:hover { background: var(--club-soft); }
+
+/* ---------- Logos & Apparel ---------- */
+.art-card { overflow: hidden; }
+/* Square tiles; the image keeps its own proportions and fits inside (container units = tile width). */
+.art-tile { display: flex; align-items: center; justify-content: center; aspect-ratio: 1 / 1; padding: 1rem; container-type: inline-size; }
+.art-tile img { max-width: 100%; max-height: 100cqw; width: auto; height: auto; }
+.art-light { background: #fff; border-bottom: 1px solid #dee2e6; }
+.art-dark { background: #000; }
+.art-muted { background: #e9ecef; }
+.art-sheet { aspect-ratio: auto; }
+.art-sheet img { width: 100%; height: auto; max-height: none; }
+.signin-crest { width: 110px; height: auto; }

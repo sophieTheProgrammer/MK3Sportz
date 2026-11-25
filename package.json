@@ -1,0 +1,21 @@
+{
+  "name": "mk3sportz",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MK3 Sportz website: static pages plus the Badminton Club hub, with Google sign-in for club admins.",
+  "scripts": {
+    "start": "node server/index.js",
+    "build:brand": "node scripts/build-brand-assets.js"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "dependencies": {
+    "dotenv": "16.4.7",
+    "express": "4.22.3",
+    "google-auth-library": "10.9.1"
+  },
+  "devDependencies": {
+    "sharp": "0.35.5"
+  }
+}

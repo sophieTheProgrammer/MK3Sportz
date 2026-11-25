@@ -1,17 +1,15 @@
 /*
- * MK3 Sportz – Badminton Club hub (demo)
- * Single-page app using the site's existing stack (Bootstrap 5 + jQuery).
+ * MK3 Sportz – club hub, shared by every sport (Badminton, Pickleball, ...).
+ * Single-page app using the site's existing stack (Bootstrap 5 + jQuery). The sport comes
+ * from the URL (/badminton/, /pickleball/) and its content from club/sports/<sport>.js.
  * All people, messages, registrations and tournaments are FICTIONAL SAMPLE DATA.
- * Demo state is saved in localStorage so changes survive a refresh.
- * NOTE: privacy rules here are enforced in the browser for demo purposes only;
- * a production site must enforce them on a server.
+ * Club data is stored on the server (server/). Visitors have no accounts: what they create
+ * (registrations, message threads) is opened by a secret key kept in their browser.
+ * Only admins sign in (Google, allowlisted accounts); the server enforces that, not this file.
  */
 (function () {
   "use strict";
 
-  const STORE_KEY = "mk3-badminton-demo-v1";
-  const MEMBER_ID = "u-jordan"; // the demo "Adult Member"
-  const ADMIN_ID = "u-admin"; // the demo "Admin"
 
   // ---------------------------------------------------------------- helpers
   const pad = (n) => String(n).padStart(2, "0");
@@ -25,201 +23,153 @@
   const fmtTime = (s) => parse(s).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   const fmtStamp = (s) => parse(s).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   const isoNow = () => new Date().toISOString();
-  const uid = (p) => `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const escBr = (s) => esc(s).replace(/\n/g, "<br>");
   const sampleTag = '<span class="badge rounded-pill text-bg-light border sample-tag">Sample</span>';
 
-  // ---------------------------------------------------------------- seed data
-  function seed() {
-    const today = startOfDay(new Date());
-    const now = new Date();
-    const ago = (h) => new Date(now.getTime() - h * 3600e3).toISOString();
-    const saturday = addDays(today, (6 - today.getDay() + 7) % 7);
+  // ---------------------------------------------------------------- sport
+  // Which sport this page is for comes from the URL; rules and content are shared with the
+  // server (club/club-core.js, club/sports/<sport>.js). Every API call is scoped to the sport.
+  const Core = window.ClubCore;
+  const SPORT = Core.sport(location.pathname.split("/")[1]) || Core.sport("badminton");
+  const API = `/api/${SPORT.id}`;
+  const CLASSES = SPORT.classes;
+  const CLASS_DEFAULTS = SPORT.classDefaults;
+  const whoLabel = Core.WHO_LABEL;
+  const classOf = (ev) => Core.classOf(SPORT, ev);
+  const eligibilityOf = (ev) => Core.eligibilityOf(SPORT, ev);
+  document.title = SPORT.pageTitle;
+  document.documentElement.dataset.sport = SPORT.id;
+  $("#clubName").text(SPORT.clubName);
+  $("#clubByline").text(SPORT.byline);
+  // Academy artwork in the page chrome: crest next to the name (decorative there) and the tab icon.
+  const BRAND = SPORT.brand;
+  $("#clubLogo").attr({ src: BRAND.logo.src, srcset: BRAND.logo.srcset, sizes: "37px", alt: "" }).prop("hidden", false);
+  $("#favicon").attr({ href: BRAND.favicon, type: "image/png" });
+  const regStatus = (ev) => window.ClubCore.regStatus(ev, { count: regCount(ev), fmtShortDate });
 
-    const users = {
-      "u-owner": { id: "u-owner", name: "Dana Whitfield", role: "owner", title: "Club Owner" },
-      "u-admin": { id: "u-admin", name: "Sam Okafor", role: "admin", title: "Club Admin" },
-      "u-jordan": { id: "u-jordan", name: "Jordan Rivera", role: "member", title: "Adult player · Guardian of Mia" },
-      "u-priya": { id: "u-priya", name: "Priya Shah", role: "member", title: "Parent of Leo" },
-      "u-ken": { id: "u-ken", name: "Ken Morales", role: "member", title: "Parent of Ava" },
-    };
-    const players = [
-      { id: "p-jordan", name: "Jordan Rivera", group: "Adult Open Play", adult: true, userId: "u-jordan", guardians: [] },
-      { id: "p-mia", name: "Mia Rivera", group: "General Group (age 12)", adult: false, userId: null, guardians: ["u-jordan"] },
-      { id: "p-leo", name: "Leo Shah", group: "Elite Group (age 14)", adult: false, userId: null, guardians: ["u-priya"] },
-      { id: "p-ava", name: "Ava Morales", group: "General Group (age 10)", adult: false, userId: null, guardians: ["u-ken"] },
-      { id: "p-marcus", name: "Marcus Tran", group: "Adult Open Play", adult: true, userId: null, guardians: [] },
-    ];
+  // ---------------------------------------------------------------- data (server) + view preferences (browser)
+  // Club data lives on the server, separately for each sport: /api/<sport>/state for members and
+  // visitors, /api/<sport>/admin/state only for a signed-in admin. This browser just remembers
+  // view preferences.
+  const PREFS_KEY = `mk3-${SPORT.id}-prefs-v2`;
+  const DRAFT_KEY = `mk3-${SPORT.id}-spotlight-draft`;
+  const SIGN_IN_URL = `/${SPORT.id}/admin-sign-in.html`;
+  const DATA_KEYS = ["users", "players", "events", "announcements", "registrations", "spotlights", "conversations"];
+  const state = {
+    role: "member", // "member" = the public site; "admin" only while the server reports an admin session
+    spotlightDraft: null,
+    ui: { calMonth: ymd(new Date()).slice(0, 7), selectedDay: null, filters: { practice: true, tournament: true } },
+    users: {}, players: [], events: [], announcements: [], registrations: [], spotlights: [], conversations: [],
+  };
+  let session = { admin: false, configured: false };
+  let loaded = false;
 
-    // Practices – times & venues come from the current badminton page.
-    const events = [];
-    for (let w = -2; w <= 10; w++) {
-      const sat = addDays(saturday, 7 * w);
-      const sun = addDays(sat, 1);
-      const wed = addDays(sat, -3);
-      events.push({
-        id: `pr-gen-${ymd(sat)}`, type: "practice", title: "General Group Practice",
-        start: at(sat, "16:00"), end: at(sat, "18:00"), location: "Canyon Crest Academy",
-        audience: "Open to kids of all ages and skill levels",
-        details: "Footwork, fundamentals and fun game play. Wear comfortable athletic clothes & shoes and bring plenty of water.",
-        requiresRegistration: false,
-      });
-      [sat, sun].forEach((d) => events.push({
-        id: `pr-elite-${ymd(d)}`, type: "practice", title: "Elite Group Practice",
-        start: at(d, "16:00"), end: at(d, "18:00"), location: "Oak Valley Middle School",
-        audience: "Qualified 8th, 9th & varsity-level players",
-        details: "High-intensity drills, match play and tournament preparation.",
-        requiresRegistration: false,
-      }));
-      events.push({
-        id: `pr-adult-${ymd(wed)}`, type: "practice", title: "Adult Open Play", sample: true,
-        start: at(wed, "19:00"), end: at(wed, "21:00"), location: "Oak Valley Middle School",
-        audience: "Adults, all skill levels",
-        details: "Coached warm-up followed by rotating doubles. Sign-up required — limited to 16 courts spots each week. Shuttles provided.",
-        requiresRegistration: true, capacity: 16, baseRegistered: 9,
-      });
-    }
-
-    const cancelledSat = addDays(saturday, 14);
-    const cancelledId = `pr-gen-${ymd(cancelledSat)}`;
-    events.find((e) => e.id === cancelledId).cancelled = true;
-
-    const t = (o) => Object.assign({ type: "tournament", sample: true, requiresRegistration: true }, o);
-    events.push(
-      t({
-        id: "t-holiday-rr", title: "Holiday Club Round Robin",
-        start: at(addDays(saturday, 7), "09:00"), end: at(addDays(saturday, 7), "13:00"),
-        location: "Canyon Crest Academy Gym", divisions: ["Junior Singles", "Junior Doubles"], adultEvent: false,
-        deadline: at(addDays(today, -1), "23:59"), capacity: 40, baseRegistered: 34, fee: "$15",
-        details: "Friendly in-club round robin to close out the year. Every player gets at least 4 matches. Hot cocoa provided!",
-      }),
-      t({
-        id: "t-winter-open", title: "MK3 Winter Junior Open",
-        start: at(addDays(saturday, 21), "08:00"), end: at(addDays(saturday, 21), "18:00"),
-        location: "Canyon Crest Academy Gym", divisions: ["U11 Singles", "U13 Singles", "U15 Singles", "U15 Doubles"], adultEvent: false,
-        deadline: at(addDays(today, 10), "23:59"), capacity: 64, baseRegistered: 41, fee: "$35 per event",
-        details: "Our flagship junior tournament. Group stage followed by single-elimination knockouts. Players should arrive 45 minutes before their first match. Feather shuttles provided for knockout rounds.",
-      }),
-      t({
-        id: "t-adult-doubles", title: "SoCal Adult Doubles Classic",
-        start: at(addDays(saturday, 36), "09:00"), end: at(addDays(saturday, 36), "17:00"),
-        location: "Oak Valley Middle School Gym", divisions: ["Men's Doubles B", "Women's Doubles B", "Mixed Doubles A", "Mixed Doubles B"], adultEvent: true,
-        deadline: at(addDays(today, 24), "23:59"), capacity: 48, baseRegistered: 22, fee: "$40 per team",
-        details: "Recreational-to-intermediate doubles for adults. Partner not required — we'll pair solo sign-ups by level.",
-      }),
-      t({
-        id: "t-new-year", title: "New Year Shuttle Showdown",
-        start: at(addDays(saturday, 49), "08:30"), end: at(addDays(saturday, 49), "16:00"),
-        location: "Canyon Crest Academy Gym", divisions: ["U13 Singles", "U15 Singles", "U17 Singles"], adultEvent: false,
-        deadline: at(addDays(today, 30), "23:59"), capacity: 32, baseRegistered: 32, fee: "$30",
-        details: "Competitive singles event for intermediate and elite juniors. Currently full — contact an admin to be added to the waitlist.",
-      }),
-      t({
-        id: "t-spring-invite", title: "Spring Varsity Prep Invitational",
-        start: at(addDays(saturday, 84), "08:00"), end: at(addDays(saturday, 84), "17:00"),
-        location: "Oak Valley Middle School Gym", divisions: ["Varsity Singles", "Varsity Doubles", "JV Singles"], adultEvent: false,
-        opensAt: at(addDays(today, 40), "09:00"), deadline: at(addDays(today, 70), "23:59"), capacity: 48, baseRegistered: 0, fee: "$40",
-        details: "Invitation-style event to prepare high school players for the spring season.",
-      })
-    );
-
-    const announcements = [
-      {
-        id: "a-winter-open", category: "reminder", authorId: "u-admin", createdAt: ago(24 * 5),
-        title: "Registration is open: MK3 Winter Junior Open",
-        body: "Sign-ups for the Winter Junior Open are now open on the Tournaments page. Divisions: U11, U13 and U15 singles plus U15 doubles. Spots are limited, so please register before the deadline.",
-        eventId: "t-winter-open",
-      },
-      {
-        id: "a-holiday", category: "general", authorId: "u-owner", createdAt: ago(24 * 2),
-        title: "Holiday Round Robin — see you there!",
-        body: "Registration for the Holiday Club Round Robin is now closed. Brackets will be posted at the gym. Thank you to all our volunteer coaches!",
-        eventId: "t-holiday-rr",
-      },
-      {
-        id: "a-cancel", category: "cancellation", authorId: "u-owner", createdAt: ago(3),
-        title: `No General Group practice on ${fmtShortDate(at(cancelledSat, "16:00"))}`,
-        body: "Canyon Crest Academy's gym is reserved for a school event that afternoon, so General Group practice is cancelled. Elite Group practice at Oak Valley is still on.",
-        eventId: cancelledId,
-      },
-    ];
-
-    const nextWed = addDays(saturday, 4); // the Wednesday after this Saturday
-    const registrations = [
-      {
-        id: "r-seed-1", eventId: "t-winter-open", playerId: "p-mia", division: "U13 Singles",
-        userId: "u-jordan", createdAt: ago(24 * 4), code: "MK3-7Q2D",
-      },
-      {
-        id: "r-seed-2", eventId: `pr-adult-${ymd(nextWed)}`, playerId: "p-marcus", division: null,
-        userId: "u-marcus", createdAt: ago(24 * 1), code: "MK3-K8TR",
-      },
-    ];
-
-    const spotlights = [
-      {
-        id: "s-mia", playerId: "p-mia", authorId: "u-admin", publishedAt: ago(24 * 6),
-        headline: "Mia's quick recovery is paying off",
-        improved: "Footwork recovery — Mia now returns to her base position after every rear-court shot instead of watching the shuttle.",
-        example: "In last Saturday's clear-and-recover drill she got back to center within two steps on 8 out of 10 rallies (up from 3 out of 10 in October).",
-        nextSkill: "A consistent backhand clear from the rear court.",
-        coachingNotes: "Mia drops her racket head after the overhead which delays her backhand prep. Home practice: 10 minutes of shadow footwork 3x/week, focusing on a 'racket-up' ready position. Re-assess at the Winter Junior Open.",
-      },
-      {
-        id: "s-leo", playerId: "p-leo", authorId: "u-owner", publishedAt: ago(24 * 12),
-        headline: "Leo's net game took a big step forward",
-        improved: "Net play — Leo is taking the shuttle much earlier at the net and creating attacking chances.",
-        example: "In his Elite Group match vs. a varsity partner pair, he won 6 points directly from tight net kills.",
-        nextSkill: "Deceptive drop shots from the rear court.",
-        coachingNotes: "PRIVATE (Leo / guardian / staff): Leo's left knee was sore after Sunday's session — keep lunges limited for 2 weeks and check in with his parent before tournament play.",
-      },
-    ];
-
-    const conversations = [
-      {
-        id: "c-mia-group", memberId: "u-jordan", to: "owner", subject: "Is Mia ready for the intermediate group?", playerId: "p-mia",
-        messages: [
-          { id: "m1", from: "u-jordan", at: ago(24 * 6), body: "Hi Dana! Mia has been loving Saturdays. Do you think she's ready to try the intermediate group next season?" },
-          { id: "m2", from: "u-owner", at: ago(24 * 5), body: "Hi Jordan — she's made great progress on footwork. Let's have her play a tournament first and we'll re-evaluate in January." },
-          { id: "m3", from: "u-jordan", at: ago(24 * 2), body: "Sounds good. Is the Winter Junior Open U13 Singles a good fit for her?" },
-          { id: "m4", from: "u-owner", at: ago(20), body: "Yes, U13 Singles is perfect. I see she's already registered — great! Coach Sam will share a warm-up plan the week before." },
-        ],
-        readAt: { member: ago(24 * 2), staff: ago(20) },
-      },
-      {
-        id: "c-carpool", memberId: "u-priya", to: "admin", subject: "Carpool to Oak Valley on Sundays", playerId: "p-leo",
-        messages: [
-          { id: "m5", from: "u-priya", at: ago(3), body: "Hi Sam, are there other Elite families near Carmel Valley interested in a Sunday carpool to Oak Valley?" },
-        ],
-        readAt: { member: ago(3), staff: ago(48) },
-      },
-    ];
-
-    return {
-      version: 1, role: "member", users, players, events, announcements, registrations, spotlights, conversations,
-      ui: { calMonth: ymd(today).slice(0, 7), selectedDay: null, filters: { practice: true, tournament: true } },
-      spotlightDraft: null,
-    };
-  }
-
-  // ---------------------------------------------------------------- store
-  let state;
-  function load() {
+  // Visitors have no accounts. What they create (registrations, message threads) comes back with a
+  // secret key; this browser keeps the keys, so "My Registrations" and "Messages" show only their own.
+  const DEVICE_KEY = `mk3-${SPORT.id}-device-v1`;
+  const LOOKUP_LIMIT = 50;
+  const device = { registrations: [], conversations: [] };
+  function loadDevice() {
     try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (raw) { state = JSON.parse(raw); if (state && state.version === 1) return; }
-    } catch (e) { /* ignore and reseed */ }
-    state = seed();
-    save();
+      const d = JSON.parse(localStorage.getItem(DEVICE_KEY) || "{}");
+      for (const kind of ["registrations", "conversations"]) {
+        device[kind] = (Array.isArray(d[kind]) ? d[kind] : []).filter((x) => x && typeof x.id === "string" && typeof x.key === "string");
+      }
+    } catch (e) { /* storage unavailable: remember things for this visit only */ }
+  }
+  function saveDevice() { try { localStorage.setItem(DEVICE_KEY, JSON.stringify(device)); } catch (e) { /* ignore */ } }
+  function remember(kind, id, key) {
+    if (!device[kind].some((x) => x.id === id)) device[kind].push({ id, key });
+    saveDevice();
+  }
+  const keyFor = (kind, id) => (device[kind].find((x) => x.id === id) || {}).key;
+  const notesCache = {}; // spotlight id → coaching notes opened with a private family link
+
+  function loadPrefs() {
+    try {
+      localStorage.removeItem("mk3-badminton-demo-v1"); // data from the old browser-only demo
+      const p = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}");
+      if (p.role === "admin" || p.role === "member") state.role = p.role;
+      if (p.ui && typeof p.ui === "object") Object.assign(state.ui, p.ui);
+    } catch (e) { /* storage unavailable: use defaults */ }
+    try { state.spotlightDraft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "null"); } catch (e) { state.spotlightDraft = null; }
+    loadDevice();
   }
   function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { console.warn("Could not save demo data", e); }
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify({ role: state.role, ui: state.ui })); } catch (e) { /* ignore */ }
+    try {
+      if (state.spotlightDraft) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(state.spotlightDraft));
+      else sessionStorage.removeItem(DRAFT_KEY);
+    } catch (e) { /* ignore */ }
+  }
+
+  class ApiError extends Error {
+    constructor(status, errors) { super(errors[0]); this.status = status; this.errors = errors; }
+  }
+  async function api(method, url, body) {
+    const opts = { method, credentials: "same-origin", headers: { Accept: "application/json" } };
+    if (method !== "GET" && method !== "DELETE") {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body || {});
+    }
+    let res;
+    try { res = await fetch(url, opts); } catch (e) { throw new ApiError(0, ["Can't reach the club server. Check that it's running, then try again."]); }
+    let data = {};
+    try { data = await res.json(); } catch (e) { /* no body */ }
+    if (res.status === 401 && url.startsWith(`${API}/admin`)) adminSessionEnded();
+    if (!res.ok) throw new ApiError(res.status, data.errors || [data.error || "Something went wrong. Please try again."]);
+    return data;
+  }
+  async function refreshSession() {
+    try { session = await api("GET", "/api/session"); } catch (e) { session = { admin: false, configured: false }; }
+    if (!session.admin && state.role === "admin") { state.role = "member"; save(); }
+  }
+  async function loadState() {
+    const data = await api("GET", isAdmin() ? `${API}/admin/state` : `${API}/state`);
+    for (const k of DATA_KEYS) state[k] = data[k] || (k === "users" ? {} : []);
+    if (!isAdmin()) await loadDeviceItems();
+    loaded = true;
+  }
+  /** This browser's own registrations and message threads, opened with their keys. */
+  async function loadDeviceItems() {
+    const fetchKind = async (kind) => {
+      const sent = device[kind].slice(0, LOOKUP_LIMIT);
+      if (!sent.length) return [];
+      const found = (await api("POST", `${API}/${kind}/lookup`, { items: sent }))[kind] || [];
+      // Forget anything the club no longer has (cancelled, or the demo data was reset).
+      const ids = new Set(found.map((x) => x.id));
+      if (found.length < sent.length) { device[kind] = device[kind].filter((x, i) => i >= LOOKUP_LIMIT || ids.has(x.id)); saveDevice(); }
+      return found;
+    };
+    [state.registrations, state.conversations] = await Promise.all([fetchKind("registrations"), fetchKind("conversations")]);
+  }
+  /** Make a change on the server, then reload the data this viewer may see. */
+  async function change(method, url, body) {
+    const out = await api(method, url, body);
+    await loadState();
+    return out;
+  }
+  /** For forms: run the change, or show the server's validation errors in the form. */
+  async function submitForm(form, method, url, body) {
+    const btn = form.querySelector("[type=submit]");
+    if (btn) btn.disabled = true;
+    try { return await change(method, url, body); }
+    catch (err) { showFormErrors(form, err.errors); return null; }
+    finally { if (btn) btn.disabled = false; }
+  }
+  function adminSessionEnded() {
+    if (!session.admin) return;
+    session = { admin: false, configured: session.configured };
+    state.role = "member";
+    save();
+    location.href = `${SIGN_IN_URL}?error=expired`;
   }
 
   // ---------------------------------------------------------------- selectors / rules
-  const isAdmin = () => state.role === "admin";
-  const me = () => state.users[isAdmin() ? ADMIN_ID : MEMBER_ID];
+  // Admin view = the server says this browser has an admin session AND the admin chose the Admin view.
+  const isAdmin = () => state.role === "admin" && session.admin === true;
+  const me = () => state.users[session.userId] || { id: session.userId, name: session.name, title: "Club Admin" }; // the signed-in admin
   const user = (id) => state.users[id] || { name: "Club member", title: "" };
   const player = (id) => state.players.find((p) => p.id === id);
   const event = (id) => state.events.find((e) => e.id === id);
@@ -227,49 +177,29 @@
   const byStart = (a, b) => parse(a.start) - parse(b.start);
   const upcoming = (e) => parse(e.end) >= new Date();
 
-  // Players the current member may register / see private notes for: themselves + dependants.
-  const myPlayers = () => state.players.filter((p) => p.userId === MEMBER_ID || p.guardians.includes(MEMBER_ID));
+  // Coaching notes: staff see them; a family sees them only through the private link staff send.
+  const notesFor = (spot) => (isAdmin() ? spot.coachingNotes : notesCache[spot.id]);
 
-  function canSeeNotes(spot) {
-    if (isAdmin()) return true; // authorised staff
-    const p = player(spot.playerId);
-    return !!p && (p.userId === me().id || p.guardians.includes(me().id));
-  }
-
+  // Admin view: every registration. Public view: only the ones made in this browser.
   const regsFor = (evId) => state.registrations.filter((r) => r.eventId === evId);
-  const regCount = (ev) => (ev.baseRegistered || 0) + regsFor(ev.id).length;
+  // The server sends the total count (visitors never receive other people's registrations).
+  const regCount = (ev) => (ev.registeredCount != null ? ev.registeredCount : (ev.baseRegistered || 0) + regsFor(ev.id).length);
 
-  function regStatus(ev) {
-    const now = new Date();
-    if (!ev.requiresRegistration) return { key: "none", label: "No sign-up needed", cls: "text-bg-light border", open: false };
-    if (ev.cancelled) return { key: "cancelled", label: "Cancelled", cls: "text-bg-dark", open: false };
-    if (parse(ev.end) < now) return { key: "past", label: "Event ended", cls: "text-bg-secondary", open: false };
-    // Staff can override the registration dates: ev.signups = "open" | "closed" (unset = follow the dates).
-    if (ev.signups === "closed") return { key: "closed", label: "Sign-ups closed", cls: "text-bg-secondary", open: false, manual: true };
-    const forced = ev.signups === "open";
-    if (!forced && ev.opensAt && parse(ev.opensAt) > now) return { key: "soon", label: `Opens ${fmtShortDate(ev.opensAt)}`, cls: "text-bg-info", open: false };
-    const deadline = parse(ev.deadline || ev.start);
-    if (!forced && deadline < now) return { key: "closed", label: "Registration closed", cls: "text-bg-secondary", open: false };
-    const taken = regCount(ev);
-    if (ev.capacity && taken >= ev.capacity) return { key: "full", label: "Full – waitlist only", cls: "text-bg-warning", open: false };
-    const left = ev.capacity ? ev.capacity - taken : null;
-    return { key: "open", label: left != null ? `Open · ${left} spot${left === 1 ? "" : "s"} left` : "Open", cls: "text-bg-success", open: true, manual: forced };
-  }
   const statusBadge = (ev) => { const s = regStatus(ev); return `<span class="badge ${s.cls}">${esc(s.label)}</span>`; };
   const typeBadge = (ev) => ev.type === "tournament"
     ? '<span class="badge text-bg-tournament">Tournament</span>'
     : '<span class="badge text-bg-practice">Practice</span>';
 
   // Conversations
-  const visibleConvos = () => state.conversations
-    .filter((c) => isAdmin() || c.memberId === MEMBER_ID)
-    .sort((a, b) => parse(last(b).at) - parse(last(a).at));
+  // Admin view: the whole staff inbox. Public view: threads started in this browser (or opened by private link).
+  const visibleConvos = () => [...state.conversations].sort((a, b) => parse(last(b).at) - parse(last(a).at));
   const last = (c) => c.messages[c.messages.length - 1];
   const isStaffId = (id) => ["owner", "admin"].includes(user(id).role);
+  const fromVisitor = (m) => m.from === "visitor";
   function unreadIn(c) {
-    const side = isAdmin() ? "staff" : "member";
+    const side = isAdmin() ? "staff" : "visitor";
     const readAt = parse(c.readAt[side] || 0);
-    return c.messages.filter((m) => (isAdmin() ? !isStaffId(m.from) : isStaffId(m.from)) && parse(m.at) > readAt).length;
+    return c.messages.filter((m) => (isAdmin() ? fromVisitor(m) : !fromVisitor(m)) && parse(m.at) > readAt).length;
   }
   const totalUnread = () => visibleConvos().reduce((n, c) => n + unreadIn(c), 0);
 
@@ -312,7 +242,7 @@
     const rows = [
       ["Date", fmtDate(ev.start)],
       ["Time", `${fmtTime(ev.start)} – ${fmtTime(ev.end)}`],
-      [ev.type === "tournament" ? "Venue" : "Location", `${esc(ev.location)} <a class="small ms-1" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location + " San Diego CA")}">Map</a>`],
+      [ev.type === "tournament" ? "Venue" : "Location", `${esc(ev.location)} <a class="small ms-1" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${ev.location} ${SPORT.mapArea}`)}">Map</a>`],
     ];
     const cls = classOf(ev);
     if (cls) rows.push(["Class", `<a href="#/classes/${esc(cls.id)}" data-action="modal-go">${esc(cls.title)}</a>`]);
@@ -347,20 +277,15 @@
           <div class="small"><span class="fw-semibold">Sign-ups:</span> ${regCount(ev)}${ev.capacity ? ` / ${ev.capacity}` : ""} registered</div>
           <div class="d-flex flex-wrap gap-2">${signupToggle(ev)}<a href="#/admin/signups/${esc(ev.id)}" class="btn btn-sm btn-outline-secondary" data-action="modal-go">View registered players</a></div>
         </div>
-        <div class="small text-muted mt-1">Switch to <em>Adult Member</em> to test signing up.</div></div>`;
+        <div class="small text-muted mt-1">Visitors sign up here without an account — switch the view to <em>Public site</em> to try it.</div></div>`;
     }
-    const mine = regs.filter((r) => r.userId === MEMBER_ID);
-    const eligibleLeft = eligiblePlayers(ev).filter((p) => !mine.some((r) => r.playerId === p.id));
+    const mine = regs; // sign-ups made in this browser
     return `
-      ${mine.length ? `<div class="alert alert-success py-2 mb-2"><strong>You're registered:</strong> ${mine.map((r) => `${esc(player(r.playerId)?.name)}${r.division ? ` (${esc(r.division)})` : ""}`).join(", ")}</div>` : ""}
-      ${st.open && eligibleLeft.length
-        ? `<button class="btn btn-brand" data-action="open-register" data-id="${esc(ev.id)}">${mine.length ? "Register another player" : "Register"}</button>`
-        : st.open ? "" : `<div class="small text-muted">Online sign-up is not available (${esc(st.label.toLowerCase())}).</div>`}`;
-  }
-
-  function eligiblePlayers(ev) {
-    const who = eligibilityOf(ev);
-    return myPlayers().filter((p) => who === "all" || (who === "adult" ? p.adult : !p.adult));
+      ${mine.length ? `<div class="alert alert-success py-2 mb-2"><strong>Registered from this device:</strong> ${mine.map((r) => `${esc(r.participant.name)}${r.division ? ` (${esc(r.division)})` : ""}`).join(", ")}</div>` : ""}
+      ${st.open
+        ? `<button class="btn btn-brand" data-action="open-register" data-id="${esc(ev.id)}">${mine.length ? "Register someone else" : "Register"}</button>
+           <span class="small text-muted ms-2">No account needed.</span>`
+        : `<div class="small text-muted">Online sign-up is not available (${esc(st.label.toLowerCase())}).</div>`}`;
   }
 
   function openEventModal(id) {
@@ -373,19 +298,45 @@
   function openRegister(id) {
     const ev = event(id);
     if (!ev) return;
-    const st = regStatus(ev);
-    const mine = regsFor(ev.id).filter((r) => r.userId === MEMBER_ID);
-    const options = eligiblePlayers(ev).filter((p) => !mine.some((r) => r.playerId === p.id));
-    if (isAdmin()) return showModal("Registration", '<p>Switch to the <strong>Adult Member</strong> role to register.</p>');
-    if (!st.open || !options.length) return showModal("Registration unavailable", `<p>Sign-ups for <strong>${esc(ev.title)}</strong> are not available right now.</p>`);
+    if (isAdmin()) return showModal("Registration", '<p>Visitors register here without an account. Switch the view to <strong>Public site</strong> to try it.</p>');
+    if (!regStatus(ev).open) return showModal("Registration unavailable", `<p>Sign-ups for <strong>${esc(ev.title)}</strong> are not available right now.</p>`);
+    const who = eligibilityOf(ev);
+    const types = [["adult", "An adult (18+)"], ["junior", "A junior (under 18)"]].filter(([t]) => who === "all" || who === t);
+    const juniorOnly = who === "junior";
     showModal(`Register: ${esc(ev.title)}`, `
-      <p class="small text-muted mb-3">${fmtDate(ev.start)} · ${fmtTime(ev.start)} – ${fmtTime(ev.end)} · ${esc(ev.location)}</p>
+      <p class="small text-muted mb-1">${fmtDate(ev.start)} · ${fmtTime(ev.start)} – ${fmtTime(ev.end)} · ${esc(ev.location)}</p>
+      <p class="small mb-3">Open to ${esc(whoLabel[who].toLowerCase())}. No account needed.</p>
       <form data-form="register" data-id="${esc(ev.id)}" novalidate>
+        <div class="form-errors"></div>
         <div class="mb-3">
-          <label class="form-label" for="regPlayer">Player</label>
-          <select class="form-select" id="regPlayer" name="playerId" required>
-            ${options.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${p.userId === MEMBER_ID ? " (me)" : ""}</option>`).join("")}
+          <label class="form-label" for="regName">Participant's full name</label>
+          <input class="form-control" id="regName" name="participantName" maxlength="80" required>
+          <div class="invalid-feedback">Enter the participant's name.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="regType">The participant is</label>
+          <select class="form-select" id="regType" name="participantType" required>
+            ${types.length > 1 ? '<option value="">Choose…</option>' : ""}
+            ${types.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}
           </select>
+          <div class="invalid-feedback">Choose one.</div>
+        </div>
+        <div class="mb-3 ${juniorOnly ? "" : "d-none"}" id="regGuardianGroup">
+          <label class="form-label" for="regGuardian">Parent or guardian's name</label>
+          <input class="form-control" id="regGuardian" name="guardianName" maxlength="80" autocomplete="name" ${juniorOnly ? "required" : ""}>
+          <div class="invalid-feedback">Enter a parent or guardian's name.</div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-sm-7">
+            <label class="form-label" for="regEmail">Contact email</label>
+            <input type="email" class="form-control" id="regEmail" name="email" maxlength="120" autocomplete="email" required>
+            <div class="invalid-feedback">Enter an email address.</div>
+          </div>
+          <div class="col-sm-5">
+            <label class="form-label" for="regPhone">Phone <span class="text-muted">(optional)</span></label>
+            <input type="tel" class="form-control" id="regPhone" name="phone" maxlength="30" autocomplete="tel">
+          </div>
+          <div class="col-12 form-text mt-1">Only club staff see contact details.</div>
         </div>
         ${ev.divisions ? `<div class="mb-3">
           <label class="form-label" for="regDivision">Division</label>
@@ -408,29 +359,36 @@
       </form>`);
   }
 
-  function submitRegister(form) {
+  async function submitRegister(form) {
     const ev = event(form.dataset.id);
     form.classList.add("was-validated");
-    if (!form.checkValidity() || !ev || !regStatus(ev).open) return;
+    if (!form.checkValidity() || !ev) return;
     const fd = new FormData(form);
-    const reg = {
-      id: uid("r"), eventId: ev.id, playerId: fd.get("playerId"), division: fd.get("division") || null,
-      userId: MEMBER_ID, createdAt: isoNow(),
-      code: "MK3-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
-    };
-    state.registrations.push(reg);
-    save();
+    const btn = form.querySelector("[type=submit]");
+    btn.disabled = true;
+    let out;
+    try {
+      out = await api("POST", `${API}/registrations`, {
+        eventId: ev.id, participantName: fd.get("participantName"), participantType: fd.get("participantType"),
+        guardianName: fd.get("guardianName") || "", email: fd.get("email"), phone: fd.get("phone") || "",
+        division: fd.get("division") || null, agree: !!fd.get("agree"),
+      });
+    } catch (err) { btn.disabled = false; return showFormErrors(form, err.errors); }
+    remember("registrations", out.registration.id, out.key); // this browser can now see and cancel it
+    await loadState();
+    const reg = out.registration;
     showModal("Registration confirmed", `
       <div class="text-center py-2">
         <div class="display-6 text-success mb-2" aria-hidden="true">✓</div>
         <h2 class="h5">You're signed up!</h2>
-        <p class="mb-1"><strong>${esc(player(reg.playerId).name)}</strong> is registered for <strong>${esc(ev.title)}</strong>${reg.division ? ` in <strong>${esc(reg.division)}</strong>` : ""}.</p>
+        <p class="mb-1"><strong>${esc(reg.participant.name)}</strong> is registered for <strong>${esc(ev.title)}</strong>${reg.division ? ` in <strong>${esc(reg.division)}</strong>` : ""}.</p>
         <p class="text-muted small mb-1">${fmtDate(ev.start)} · ${fmtTime(ev.start)} – ${fmtTime(ev.end)} · ${esc(ev.location)}</p>
-        <p class="mb-3">Confirmation code: <code id="confirmCode">${esc(reg.code)}</code></p>
+        <p class="mb-1">Confirmation code: <code id="confirmCode">${esc(reg.code)}</code></p>
+        <p class="small text-muted mb-3">Saved on this device under My Registrations. Keep the code — club staff can look it up if you need help.</p>
         <a href="#/registrations" class="btn btn-brand" data-action="modal-go">View My Registrations</a>
         <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Done</button>
       </div>`);
-    toast(`Registered ${esc(player(reg.playerId).name)} for ${esc(ev.title)}.`);
+    toast(`Registered ${esc(reg.participant.name)} for ${esc(ev.title)}.`);
     render();
   }
 
@@ -452,6 +410,8 @@
     const myRegs = upcomingMyRegs();
     const unread = totalUnread();
     const upT = tournaments().filter(upcoming);
+    const [heroSolid, heroOutline] = SPORT.hero.darkText ? ["btn-dark", "btn-outline-dark"] : ["btn-brand", "btn-outline-light"];
+    const crest = BRAND.heroLogo;
 
     const card = (label, href, inner, id) => `
       <div class="col-md-4">
@@ -469,13 +429,18 @@
         <span>You're in the <strong>Admin</strong> view. Manage tournaments, practices, recognition and messages from the dashboard.</span>
         <a href="#/admin" class="btn btn-sm btn-primary">Open Admin Dashboard</a></div>` : ""}
       <section class="hero p-4 p-md-5 mb-4">
-        <h1 class="h2 mb-2">San Diego Badminton Academy</h1>
-        <p class="lead mb-1">A non-profit club by MK3 Sportz — fostering a fun, safe and secure environment for players to thrive.</p>
-        <p class="mb-3">Where sports and fun come together!</p>
-        <div class="d-flex flex-wrap gap-2">
-          <a href="#/calendar" class="btn btn-light">See the calendar</a>
-          <a href="#/classes" class="btn btn-outline-light">All classes</a>
-          <a href="#/tournaments" class="btn btn-outline-light">Upcoming tournaments</a>
+        <div class="d-flex flex-column flex-md-row align-items-center gap-4">
+          <img class="hero-crest order-md-2" id="heroCrest" src="${esc(crest.src)}" width="${crest.width}" height="${crest.height}" alt="${esc(crest.alt)}" fetchpriority="high">
+          <div class="flex-grow-1 text-center text-md-start">
+            <h1 class="h2 mb-2">${esc(SPORT.hero.title)}</h1>
+            <p class="lead mb-1">${esc(SPORT.hero.lead)}</p>
+            <p class="mb-3">${esc(SPORT.hero.sub)}</p>
+            <div class="d-flex flex-wrap gap-2 justify-content-center justify-content-md-start">
+              <a href="#/calendar" class="btn ${heroSolid}">See the calendar</a>
+              <a href="#/classes" class="btn ${heroOutline}">All classes</a>
+              <a href="#/tournaments" class="btn ${heroOutline}">Upcoming tournaments</a>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -501,7 +466,7 @@
       <div class="row g-3" id="homeSections">
         ${homeLink("#/calendar", "Calendar &amp; Registration", isAdmin()
           ? "Practices and tournaments in one place"
-          : `Practices and tournaments in one place · ${myRegs.length} upcoming sign-up${myRegs.length === 1 ? "" : "s"}`)}
+          : `Practices and tournaments in one place · ${myRegs.length} sign-up${myRegs.length === 1 ? "" : "s"} on this device`)}
         ${homeLink("#/tournaments", "Tournaments", `${upT.length} upcoming · ${upT.filter((e) => regStatus(e).open).length} open for registration`)}
         ${homeLink("#/recognition", "Player Recognition", latestSpot
           ? `Latest spotlight: ${esc(player(latestSpot.playerId)?.name)} — ${esc(latestSpot.headline || latestSpot.improved)}`
@@ -512,7 +477,7 @@
 
       <div class="card mt-4"><div class="card-body small">
         <strong>Programs, enrollment &amp; payments:</strong> see every class, the registration form, payment instructions and discounts on the
-        <a href="#/classes">Classes page</a>.
+        <a href="#/classes">Classes page</a>. <strong class="ms-1">Academy logos &amp; shirt designs:</strong> see <a href="#/brand">Logos &amp; Apparel</a>.
       </div></div>`;
   }
 
@@ -529,71 +494,30 @@
       </div></div>`;
   }
 
-  // ----- Classes (program catalog; details from the existing badminton programs page)
-  // `prefix` links a class to its practice sessions on the shared calendar.
-  // Enrollment & payment links from the original badminton programs page.
-  const ENROLL_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSeZQzLYxd_PzV2yNkvP3-uByBAQKE4eoQf0tN_MLadq2oUG4A/viewform?usp=sf_link";
-  const PAY_URL = "https://square.link/u/pUvQOOjE";
-
-  function enrollmentInfo() {
+  // ----- Classes (catalog and enrollment details come from club/sports/<sport>.js)
+  function enrollmentInfo(c) {
+    const e = c.enroll;
+    const list = (items) => items.map(([k, v]) => `<li><strong>${esc(k)}:</strong> ${esc(v)}</li>`).join("");
     return `<section class="card shadow-sm mt-3" id="howToEnroll"><div class="card-body">
       <h2 class="h5">How to enroll</h2>
       <ol class="mb-3">
-        <li class="mb-2"><strong>Register:</strong> fill out the club registration form.
-          <div class="mt-1"><a href="${ENROLL_FORM_URL}" target="_blank" rel="noopener" class="btn btn-sm btn-brand">Open registration form ↗</a></div></li>
-        <li><strong>Pay:</strong> payments are due at the beginning of each month. A 10% late fee applies to payments received after the 5th.
+        <li class="mb-2"><strong>Register:</strong> fill out the registration form.
+          <div class="mt-1"><a href="${esc(e.formUrl)}" target="_blank" rel="noopener" class="btn btn-sm btn-brand">Open registration form ↗</a></div></li>
+        ${e.pricing ? `<li class="mb-2"><strong>Pricing:</strong><ul class="mt-1">${e.pricing.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></li>` : ""}
+        ${e.payUrl || e.payment ? `<li><strong>Pay:</strong> ${esc(e.payment || "")}
           <ul class="mt-1">
-            <li><strong>Online</strong> (Visa, Mastercard, Amex, Discover):
-              <a href="${PAY_URL}" target="_blank" rel="noopener" class="fw-semibold">Pay online ↗</a>.
-              <span class="text-danger">At checkout, enter the participant's first and last name and program in the “Note to Seller” field.</span></li>
-            <li><strong>Cash:</strong> place cash in an envelope with your full name and your children's names.</li>
+            ${e.payUrl ? `<li><strong>Online</strong> (Visa, Mastercard, Amex, Discover):
+              <a href="${esc(e.payUrl)}" target="_blank" rel="noopener" class="fw-semibold">Pay online ↗</a>.
+              ${e.payNote ? `<span class="text-danger">${esc(e.payNote)}</span>` : ""}</li>` : ""}
+            ${e.cash ? `<li><strong>Cash:</strong> ${esc(e.cash)}</li>` : ""}
           </ul>
-        </li>
+        </li>` : ""}
       </ol>
-      <h3 class="h6">Discounts &amp; scholarships</h3>
-      <ul class="small mb-0">
-        <li><strong>Sibling discount:</strong> 10% off for the 2nd and 3rd sibling</li>
-        <li><strong>Refer-a-friend:</strong> 10% off — badminton is more fun with friends!</li>
-        <li><strong>Scholarships:</strong> available upon request and financial review</li>
-      </ul>
+      ${e.bring ? `<p class="small"><strong>What to bring:</strong> ${esc(e.bring)}</p>` : ""}
+      ${e.discounts ? `<h3 class="h6">${esc(e.discountsTitle || "Discounts")}</h3><ul class="small mb-0">${list(e.discounts)}</ul>` : ""}
     </div></section>`;
   }
 
-  const CLASSES = [
-    {
-      id: "general", prefix: "pr-gen-", title: "General Group Practice", level: "All levels", enrollment: "enroll",
-      days: "Saturdays", time: "4:00 – 6:00 PM", location: "Canyon Crest Academy", who: "Kids of all ages and skill levels",
-      details: "Our core youth program: footwork, fundamentals and fun game play. Wear comfortable athletic clothes & shoes and bring plenty of water.",
-    },
-    {
-      id: "intermediate", prefix: null, title: "Intermediate Group Practice", level: "Intermediate", enrollment: "qualify",
-      days: "Shared with qualified players", time: "Shared with qualified players", location: "Shared with qualified players", who: "Qualified 7th, 8th & 9th graders",
-      details: "A step up from General Group for players who are ready for more structured drills and match play. Coaches invite players based on progress — message staff to ask about moving up.",
-    },
-    {
-      id: "elite", prefix: "pr-elite-", title: "Elite Group Practice", level: "Advanced", enrollment: "qualify",
-      days: "Saturdays & Sundays", time: "4:00 – 6:00 PM", location: "Oak Valley Middle School", who: "Qualified 8th, 9th & varsity-level players",
-      details: "High-intensity drills, match play and tournament preparation for our most experienced juniors.",
-    },
-    {
-      id: "private", prefix: null, title: "Private Lessons", level: "All levels", enrollment: "book",
-      days: "Saturdays & Sundays", time: "4:00 – 7:00 PM", location: "Oak Valley Middle School", who: "All ages and skill levels",
-      details: "One-on-one or small-group coaching tailored to the player's goals. Message the owner or an admin to request a time slot.",
-    },
-    {
-      id: "adult-open", prefix: "pr-adult-", title: "Adult Open Play", level: "All levels", enrollment: "session", sample: true,
-      days: "Wednesdays", time: "7:00 – 9:00 PM", location: "Oak Valley Middle School", who: "Adults, all skill levels",
-      details: "Coached warm-up followed by rotating doubles. Sign up for each session you plan to attend — limited to 16 spots per week. Shuttles provided.",
-    },
-    {
-      id: "adult-lessons", prefix: null, title: "Adult Group Lessons", level: "All levels", enrollment: "soon",
-      days: "Coming soon", time: "To be announced", location: "To be announced", who: "Adults, all skill levels",
-      details: "Group lessons for adults are coming soon! Message us to join the interest list and we'll send you the registration link and details.",
-    },
-  ];
-  const classOf = (ev) => (ev && ev.type === "practice"
-    ? CLASSES.find((c) => (ev.classId ? c.id === ev.classId : c.prefix && ev.id.startsWith(c.prefix)))
-    : undefined);
   const classSessions = (c) => state.events.filter((e) => classOf(e) === c && upcoming(e)).sort(byStart);
 
   function classStatus(c) {
@@ -603,7 +527,7 @@
       case "book": return { label: "Book by message", cls: "text-bg-primary", note: "Send staff a private message to request a lesson time." };
       case "soon": return { label: "Coming soon", cls: "text-bg-secondary", note: "Join the interest list by messaging staff." };
       default: {
-        const notYetMine = (e) => isAdmin() || eligiblePlayers(e).some((p) => !regsFor(e.id).some((r) => r.userId === MEMBER_ID && r.playerId === p.id));
+        const notYetMine = (e) => isAdmin() || !regsFor(e.id).length; // skip sessions this device already signed up for
         const open = classSessions(c).filter((e) => regStatus(e).open && notYetMine(e));
         return open.length
           ? { label: "Sign up per session", cls: "text-bg-success", note: "Register for each session you plan to attend.", nextOpen: open[0] }
@@ -620,8 +544,10 @@
         ? `<button class="btn ${sz} btn-outline-secondary" data-action="open-event" data-id="${esc(st.nextOpen.id)}">View next session roster</button>`
         : `<button class="btn ${sz} btn-brand" data-action="open-register" data-id="${esc(st.nextOpen.id)}">Register for ${fmtShortDate(st.nextOpen.start)} session</button>`;
     }
-    if (c.enrollment === "enroll") return `<a href="${ENROLL_FORM_URL}" target="_blank" rel="noopener" class="btn ${sz} btn-brand">Enroll — registration form ↗</a>`
-      + `<a href="${PAY_URL}" target="_blank" rel="noopener" class="btn ${sz} btn-outline-secondary">Pay online ↗</a>`;
+    if (c.enrollment === "enroll" && c.enroll) {
+      return `<a href="${esc(c.enroll.formUrl)}" target="_blank" rel="noopener" class="btn ${sz} btn-brand">Enroll — registration form ↗</a>`
+        + (c.enroll.payUrl ? `<a href="${esc(c.enroll.payUrl)}" target="_blank" rel="noopener" class="btn ${sz} btn-outline-secondary">Pay online ↗</a>` : "");
+    }
     return isAdmin() ? "" : `<a href="#/messages/new" class="btn ${sz} btn-outline-primary">Message staff</a>`;
   }
 
@@ -679,7 +605,7 @@
             <p class="pre-wrap">${esc(c.details)}</p>
             <div class="d-flex flex-wrap gap-2">${classActions(c, st, { small: false })}</div>
           </div></div>
-          ${c.enrollment === "enroll" ? enrollmentInfo() : ""}
+          ${c.enroll ? enrollmentInfo(c) : ""}
         </div>
         <div class="col-lg-5">
           <h2 class="h5">Upcoming sessions</h2>
@@ -733,6 +659,46 @@
         ${eventDetails(ev)}
         <div class="mt-3"><button class="btn btn-link px-0" data-action="goto-calendar" data-id="${esc(ev.id)}">View on calendar →</button></div>
       </div></div>`;
+  }
+
+  // ----- Logos & Apparel (academy artwork by NACU; web versions built from brand-originals/)
+  function artCard(item) {
+    const label = `${BRAND.academy} — ${item.title} (${item.use})`;
+    return `<figure class="card shadow-sm h-100 mb-0 art-card">
+      <a href="${esc(item.src)}" target="_blank" rel="noopener" class="art-tile art-${esc(item.tile)}" title="Open full size">
+        <img src="${esc(item.src)}" width="${item.width}" height="${item.height}" alt="${esc(label)}" loading="lazy" decoding="async">
+      </a>
+      <figcaption class="card-body py-2">
+        <div class="fw-semibold small">${esc(item.title)}</div>
+        <div class="small text-muted">${esc(item.use)}</div>
+        ${isAdmin() ? `<div class="small text-muted text-break mt-1">Original: ${esc(item.original)}</div>` : ""}
+      </figcaption>
+    </figure>`;
+  }
+
+  function viewBrand() {
+    const sheet = BRAND.sheet;
+    return pageHeader("Logos &amp; Apparel", `Official ${esc(BRAND.academy)} artwork, designed by ${esc(BRAND.designer)}.`) + `
+      <section class="mb-4" id="brandLogos">
+        <h2 class="h5">Academy crest &amp; profile badges</h2>
+        <p class="small text-muted">Each version is shown on the background it was designed for. Select an image to open it full size.</p>
+        <div class="row g-3">${BRAND.logos.map((l) => `<div class="col-6 col-md-4 col-lg">${artCard(l)}</div>`).join("")}</div>
+      </section>
+      <section class="mb-4" id="brandApparel">
+        <h2 class="h5">Apparel artwork</h2>
+        <p class="small text-muted">Shirt print designs from the academy's screen-print separations.</p>
+        <div class="row g-3">${BRAND.apparel.map((a) => `<div class="col-6 col-lg-3">${artCard(a)}</div>`).join("")}</div>
+        <figure class="card shadow-sm mt-3 mb-0 art-card" id="apparelSheet">
+          <a href="${esc(sheet.src)}" target="_blank" rel="noopener" class="art-tile art-sheet art-light" title="Open full size">
+            <img src="${esc(sheet.src)}" width="${sheet.width}" height="${sheet.height}" alt="${esc(BRAND.academy)} shirt print separations sheet with all four designs" loading="lazy" decoding="async">
+          </a>
+          <figcaption class="card-body py-2 small text-muted">
+            Printer's separations sheet (preview). Print-ready vendor files (.ai, .eps and .svg) are kept by the club${isAdmin()
+              ? ` in <code>brand-originals/${esc(BRAND.academy)}/Shirt Vendor Files</code>.`
+              : ` — <a href="#/messages/new">message staff</a> about shirt orders.`}
+          </figcaption>
+        </figure>
+      </section>`;
   }
 
   // ----- Calendar
@@ -823,7 +789,7 @@
   }
 
   function upcomingMyRegs() {
-    return state.registrations.filter((r) => r.userId === MEMBER_ID && event(r.eventId) && upcoming(event(r.eventId)))
+    return state.registrations.filter((r) => event(r.eventId) && upcoming(event(r.eventId)))
       .sort((a, b) => byStart(event(a.eventId), event(b.eventId)));
   }
 
@@ -834,15 +800,16 @@
         <h2 class="h5">All registrations <span class="small text-muted">(admin view)</span></h2>
         ${regs.length ? `<ul class="list-group list-group-flush">${regs.map((r) => { const e = event(r.eventId); return `
           <li class="list-group-item px-0">
-            <div class="fw-semibold">${esc(player(r.playerId)?.name)}</div>
+            <div class="fw-semibold">${esc(r.participant.name)} <span class="small text-muted fw-normal">${r.participant.adult ? "adult" : `junior · guardian ${esc(r.guardianName || "")}`}</span></div>
             <div class="small">${e ? `<a href="#" data-action="open-event" data-id="${esc(e.id)}">${esc(e.title)}</a> · ${fmtShortDate(e.start)}` : "Event removed"}${r.division ? ` · ${esc(r.division)}` : ""}</div>
-            <div class="small text-muted">${esc(r.code)} · signed up ${fmtStamp(r.createdAt)}</div>
+            <div class="small text-muted text-break">${esc(r.contact.email)}${r.contact.phone ? ` · ${esc(r.contact.phone)}` : ""} · ${esc(r.code)} · ${fmtStamp(r.createdAt)}</div>
           </li>`; }).join("")}</ul>` : '<p class="text-muted small">No registrations yet.</p>'}
       </div></div>`;
     }
     const regs = upcomingMyRegs();
     return `<div class="card shadow-sm" id="myRegistrations"><div class="card-body">
       <h2 class="h5">My Registrations</h2>
+      <p class="small text-muted mb-2">Sign-ups made on this device — no account needed.</p>
       ${regs.length ? `<ul class="list-group list-group-flush">${regs.map((r) => { const e = event(r.eventId); return `
         <li class="list-group-item px-0 reg-item">
           <div class="d-flex justify-content-between gap-2">
@@ -850,16 +817,16 @@
               <a href="#" class="fw-semibold" data-action="open-event" data-id="${esc(e.id)}">${esc(e.title)}</a>
               ${e.cancelled ? '<span class="badge text-bg-dark ms-1">Cancelled</span>' : e.rescheduledFrom ? '<span class="badge text-bg-warning ms-1">Rescheduled</span>' : ""}
               <div class="small">${fmtDate(e.start)} · ${fmtTime(e.start)}</div>
-              <div class="small text-muted">${esc(player(r.playerId)?.name)}${r.division ? ` · ${esc(r.division)}` : ""} · <code>${esc(r.code)}</code></div>
+              <div class="small text-muted">${esc(r.participant.name)}${r.division ? ` · ${esc(r.division)}` : ""} · <code>${esc(r.code)}</code></div>
             </div>
             <button class="btn btn-sm btn-outline-danger align-self-start" data-action="cancel-reg" data-id="${esc(r.id)}">Cancel</button>
           </div>
-        </li>`; }).join("")}</ul>` : '<p class="text-muted small mb-0">You have no upcoming sign-ups. Choose an event marked <span class="badge text-bg-success">Open</span> to register.</p>'}
+        </li>`; }).join("")}</ul>` : '<p class="text-muted small mb-0">No upcoming sign-ups on this device. Choose an event marked <span class="badge text-bg-success">Open</span> to register.</p>'}
     </div></div>`;
   }
 
   function viewRegistrations() {
-    return pageHeader(isAdmin() ? "All Registrations" : "My Registrations", isAdmin() ? "Every demo sign-up across practices and tournaments." : "Your upcoming sign-ups for you and your family.",
+    return pageHeader(isAdmin() ? "All Registrations" : "My Registrations", isAdmin() ? "Every sign-up across practices and tournaments, with contact details." : "Sign-ups made on this device. No account needed.",
       '<a href="#/calendar" class="btn btn-sm btn-outline-secondary">Open calendar</a>') +
       `<div class="row"><div class="col-lg-7">${registrationsPanel()}</div></div>`;
   }
@@ -867,7 +834,6 @@
   // ----- Recognition
   function spotlightCard(s, { full = false, preview = false } = {}) {
     const p = player(s.playerId);
-    const notes = canSeeNotes(s);
     return `
       <article class="card h-100 shadow-sm ${preview ? "" : "card-hover"}">
         <div class="card-body">
@@ -883,23 +849,28 @@
           <h3 class="h6 mb-1">💪 What improved</h3><p class="pre-wrap">${esc(s.improved)}</p>
           <h3 class="h6 mb-1">🎯 A specific example</h3><p class="pre-wrap">${esc(s.example)}</p>
           <h3 class="h6 mb-1">⏭️ Next skill to work on</h3><p class="pre-wrap">${esc(s.nextSkill)}</p>
-          ${full ? notesBlock(s, notes) : notes && s.coachingNotes ? '<span class="badge text-bg-warning">🔒 Private coaching notes available to you</span>' : ""}
+          ${full ? notesBlock(s) : isAdmin() && s.coachingNotes ? '<span class="badge text-bg-warning">🔒 Has private coaching notes</span>' : ""}
           ${!full && !preview ? `<a href="#/recognition/${esc(s.id)}" class="stretched-link small d-block mt-2">Read spotlight →</a>` : ""}
         </div>
       </article>`;
   }
 
-  function notesBlock(s, visible) {
-    if (!s.coachingNotes) return "";
-    const p = player(s.playerId);
-    if (!visible) {
-      return `<div class="private-box p-3 mt-3 small" id="notesHidden">🔒 Detailed coaching notes for this player are private — visible only to the player, their parent or guardian, and authorised staff.</div>`;
+  const familyLink = (s) => `${location.origin}/${SPORT.id}/#/recognition/${encodeURIComponent(s.id)}/notes/${encodeURIComponent(s.notesKey)}`;
+
+  function notesBlock(s) {
+    if (!s.coachingNotes && !s.hasPrivateNotes) return "";
+    const notes = notesFor(s);
+    if (!notes) {
+      return `<div class="private-box p-3 mt-3 small" id="notesHidden">🔒 Detailed coaching notes are private. Club staff share them directly with the player or their parent or guardian.</div>`;
     }
-    const who = p.userId ? "the player" : "the player's parent/guardian";
     return `<div class="private-box p-3 mt-3" id="notesVisible">
       <div class="fw-semibold mb-1">🔒 Private coaching notes</div>
-      <p class="mb-1 pre-wrap">${esc(s.coachingNotes)}</p>
-      <div class="small text-muted">Visible only to ${who} and authorised staff${isAdmin() ? " (you're viewing as staff)" : ""}.</div>
+      <p class="mb-1 pre-wrap">${esc(notes)}</p>
+      ${isAdmin() && s.notesKey ? `<div class="small text-muted">Only staff can see these. To share them with the player's family, send them this private link:</div>
+        <div class="input-group input-group-sm mt-1">
+          <input class="form-control" id="familyLink" readonly value="${esc(familyLink(s))}" aria-label="Private link to these coaching notes">
+          <button class="btn btn-outline-secondary" type="button" data-action="copy-input" data-target="familyLink">Copy link</button>
+        </div>` : `<div class="small text-muted">Shared privately with you by club staff. Please don't forward this link.</div>`}
     </div>`;
   }
 
@@ -907,7 +878,7 @@
     const list = [...state.spotlights].sort((a, b) => parse(b.publishedAt) - parse(a.publishedAt));
     return pageHeader("Player Recognition", "Celebrating growth: what each player improved, a real example, and what's next.",
       isAdmin() ? '<a href="#/recognition/new" class="btn btn-brand">New spotlight</a>' : "") + `
-      ${!isAdmin() ? '<div class="alert alert-light border small">Detailed coaching notes are shared only with the player, their parent or guardian, and authorised staff.</div>' : ""}
+      ${!isAdmin() ? '<div class="alert alert-light border small">Detailed coaching notes are private — club staff share them directly with the player or their parent or guardian.</div>' : ""}
       <div class="row g-3">${list.map((s) => `<div class="col-md-6">${spotlightCard(s)}</div>`).join("") || '<p class="text-muted">No spotlights yet.</p>'}</div>`;
   }
 
@@ -929,14 +900,14 @@
         <div class="row g-4">
           <div class="col-lg-7">
             <div class="preview-frame p-2" id="spotlightPreview">
-              <div class="small text-muted px-1 pb-2">Public view (all members)</div>
+              <div class="small text-muted px-1 pb-2">Public view (everyone)</div>
               ${spotlightCard(Object.assign({}, d, { coachingNotes: "" }), { preview: true })}
             </div>
           </div>
           <div class="col-lg-5">
             ${d.coachingNotes ? `<div class="private-box p-3 mb-3"><div class="fw-semibold mb-1">🔒 Private coaching notes</div>
               <p class="pre-wrap mb-1">${esc(d.coachingNotes)}</p>
-              <div class="small text-muted">Shown only to ${esc(player(d.playerId)?.name)}${player(d.playerId)?.adult ? "" : "'s parent/guardian"} and staff.</div></div>` : '<p class="small text-muted">No private coaching notes added.</p>'}
+              <div class="small text-muted">Only staff can see these. After publishing you'll get a private link to send ${esc(player(d.playerId)?.name)}${player(d.playerId)?.adult ? "" : "'s family"}.</div></div>` : '<p class="small text-muted">No private coaching notes added.</p>'}
             <div class="d-flex gap-2">
               <button class="btn btn-outline-secondary" data-action="spot-edit">Back to edit</button>
               <button class="btn btn-brand" data-action="spot-publish">Publish spotlight</button>
@@ -968,13 +939,13 @@
           </div>
         </div>
         <hr>
-        ${field("improved", "What did the player improve?", "e.g. footwork recovery, net play, serve consistency.")}
+        ${field("improved", "What did the player improve?", SPORT.examples.improved)}
         ${field("example", "A specific example", "A concrete moment: a drill result, a match point, a before/after number.")}
         ${field("nextSkill", "One skill they'll work on next", "Keep it to one clear, encouraging goal.")}
         <div class="mb-3 private-box p-3">
           <label class="form-label fw-semibold" for="sp-coachingNotes">🔒 Detailed coaching notes <span class="fw-normal">(private)</span></label>
           <textarea class="form-control" id="sp-coachingNotes" name="coachingNotes" rows="3">${esc(d.coachingNotes || "")}</textarea>
-          <div class="form-text">Only the player, their parent or guardian, and authorised staff can see these notes.</div>
+          <div class="form-text">Only staff can see these notes. After publishing, you can send the family a private link to them.</div>
         </div>
         <div class="d-flex gap-2">
           <button type="submit" class="btn btn-brand">Preview</button>
@@ -1011,6 +982,7 @@
     const form = isAdmin() ? `
       <form data-form="announcement" class="card shadow-sm mb-4" novalidate><div class="card-body">
         <h2 class="h5">Post a club-wide announcement</h2>
+        <div class="form-errors"></div>
         <div class="row g-3">
           <div class="col-md-8">
             <label class="form-label" for="an-title">Title</label>
@@ -1059,12 +1031,17 @@
       <div class="row"><div class="col-lg-8">${announcementItem(a, true)}</div></div>`;
   }
 
+  // The club owner/admin personas members can message (from this sport's data).
+  const staffName = (role) => (state.users[`u-${role}`] || {}).name || (role === "owner" ? "Club Owner" : "Club Admin");
+
+  const roleLabel = (c) => (c.contact.role === "parent" ? "Parent/guardian" : "Adult player");
+  const convoLink = (c) => `${location.origin}/${SPORT.id}/#/messages/${encodeURIComponent(c.id)}/${encodeURIComponent(keyFor("conversations", c.id) || "")}`;
+
   function convoTitle(c) {
     if (isAdmin()) {
-      const p = player(c.playerId);
-      return `${esc(user(c.memberId).name)} <span class="small text-muted fw-normal">· ${esc(user(c.memberId).title)}</span>`;
+      return `${esc(c.contact.name)} <span class="small text-muted fw-normal">· ${roleLabel(c)}</span>`;
     }
-    return c.to === "owner" ? "Dana Whitfield <span class='small text-muted fw-normal'>· Club Owner</span>" : "Sam Okafor <span class='small text-muted fw-normal'>· Club Admin</span>";
+    return `${esc(staffName(c.to))} <span class='small text-muted fw-normal'>· ${c.to === "owner" ? "Club Owner" : "Club Admin"}</span>`;
   }
 
   function convoList(activeId) {
@@ -1093,8 +1070,14 @@
       if (!c) right = notFound("conversation");
       else {
         // opening a thread marks it read for the current side
-        const side = isAdmin() ? "staff" : "member";
-        if (unreadIn(c)) { c.readAt[side] = isoNow(); save(); updateNavBadge(); }
+        const side = isAdmin() ? "staff" : "visitor";
+        if (unreadIn(c)) {
+          c.readAt[side] = isoNow(); // show it as read right away; the server records it
+          const id = encodeURIComponent(c.id);
+          (isAdmin() ? api("POST", `${API}/admin/conversations/${id}/read`) : api("POST", `${API}/conversations/${id}/read`, { key: keyFor("conversations", c.id) }))
+            .catch(() => {});
+          updateNavBadge();
+        }
         right = threadView(c);
       }
     }
@@ -1102,31 +1085,42 @@
     return pageHeader("Communications", "Club-wide updates and private messages with club staff.") + commsTabs("dm") + `
       <div class="row g-3">
         <div class="col-lg-4 ${hasRight ? "d-none d-lg-block" : ""}">${newBtn}${convoList(c && c.id)}
-          <p class="small text-muted mt-2">${isAdmin() ? "Staff inbox: conversations sent to the owner or an admin." : "Private between you and club staff (owner or admin)."}</p>
+          <p class="small text-muted mt-2">${isAdmin() ? "Staff inbox: conversations sent to the owner or an admin." : "No account needed. Conversations started on this device appear here, and each one has a private link you can open on another device."}</p>
         </div>
         <div class="col-lg-8">${hasRight ? '<a href="#/messages" class="d-lg-none small d-inline-block mb-2">← All conversations</a>' : ""}${right}</div>
       </div>`;
   }
 
   function threadView(c) {
-    const p = player(c.playerId);
+    const who = isAdmin()
+      ? `${esc(c.contact.name)} (${roleLabel(c)} · <a href="mailto:${esc(c.contact.email)}">${esc(c.contact.email)}</a>${c.contact.phone ? ` · ${esc(c.contact.phone)}` : ""})`
+      : "You";
     return `<div class="card shadow-sm" id="thread-${esc(c.id)}"><div class="card-body">
       <h2 class="h5 mb-0">${esc(c.subject)}</h2>
-      <div class="small text-muted mb-3">${esc(user(c.memberId).name)} ↔ ${c.to === "owner" ? "Club Owner" : "Club Admin"}${p ? ` · About ${esc(p.name)}` : ""} · 🔒 Private</div>
+      <div class="small text-muted mb-3">${who} ↔ ${c.to === "owner" ? "Club Owner" : "Club Admin"}${c.about ? ` · About ${esc(c.about)}` : ""} · 🔒 Private</div>
       <div class="thread d-flex flex-column gap-2 mb-3" id="threadMessages">
         ${c.messages.map((m) => {
-          const mine = isAdmin() ? isStaffId(m.from) : m.from === MEMBER_ID;
+          const mine = isAdmin() ? !fromVisitor(m) : fromVisitor(m);
+          const name = fromVisitor(m) ? c.contact.name : `${user(m.from).name}${isStaffId(m.from) ? ` (${user(m.from).title})` : ""}`;
           return `<div class="d-flex flex-column ${mine ? "align-items-end" : "align-items-start"}">
             <div class="bubble ${mine ? "mine" : "theirs"}">${esc(m.body)}</div>
-            <div class="bubble-meta">${esc(user(m.from).name)}${isStaffId(m.from) ? ` (${esc(user(m.from).title)})` : ""} · ${fmtStamp(m.at)}</div>
+            <div class="bubble-meta">${esc(name)} · ${fmtStamp(m.at)}</div>
           </div>`;
         }).join("")}
       </div>
-      <form data-form="reply" data-id="${esc(c.id)}" class="d-flex gap-2" novalidate>
-        <label class="visually-hidden" for="replyBody">Message</label>
-        <textarea class="form-control" id="replyBody" name="body" rows="2" placeholder="${isAdmin() ? "Reply as " + esc(me().name) + "…" : "Write a message…"}" required></textarea>
-        <button class="btn btn-brand align-self-end" type="submit">Send</button>
+      <form data-form="reply" data-id="${esc(c.id)}" novalidate>
+        <div class="form-errors"></div>
+        <div class="d-flex gap-2">
+          <label class="visually-hidden" for="replyBody">Message</label>
+          <textarea class="form-control" id="replyBody" name="body" rows="2" maxlength="4000" placeholder="${isAdmin() ? "Reply as " + esc(me().name) + "…" : "Write a message…"}" required></textarea>
+          <button class="btn btn-brand align-self-end" type="submit">Send</button>
+        </div>
       </form>
+      ${!isAdmin() && keyFor("conversations", c.id) ? `<div class="small text-muted mt-3">Private link to this conversation — open it on another device to see replies there. Keep it to yourself.</div>
+        <div class="input-group input-group-sm mt-1">
+          <input class="form-control" id="convoLink" readonly value="${esc(convoLink(c))}" aria-label="Private link to this conversation">
+          <button class="btn btn-outline-secondary" type="button" data-action="copy-input" data-target="convoLink">Copy link</button>
+        </div>` : ""}
     </div></div>`;
   }
 
@@ -1134,20 +1128,42 @@
     if (isAdmin()) return '<div class="alert alert-info">Families and adult players start conversations; staff reply in the same thread.</div>';
     return `<form data-form="new-message" class="card shadow-sm" novalidate><div class="card-body">
       <h2 class="h5">New private message</h2>
+      <p class="small text-muted">No account needed. Only club staff see your message and contact details; replies appear here on this device.</p>
+      <div class="form-errors"></div>
       <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" for="nm-name">Your name</label>
+          <input class="form-control" id="nm-name" name="name" maxlength="80" autocomplete="name" required>
+          <div class="invalid-feedback">Enter your name.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="nm-role">I am</label>
+          <select class="form-select" id="nm-role" name="role" required>
+            <option value="">Choose…</option>
+            <option value="parent">A parent or guardian</option>
+            <option value="adult">An adult player</option>
+          </select>
+          <div class="invalid-feedback">Choose one.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="nm-email">Email</label>
+          <input type="email" class="form-control" id="nm-email" name="email" maxlength="120" autocomplete="email" required>
+          <div class="invalid-feedback">Enter an email address.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="nm-phone">Phone <span class="text-muted">(optional)</span></label>
+          <input type="tel" class="form-control" id="nm-phone" name="phone" maxlength="30" autocomplete="tel">
+        </div>
         <div class="col-md-6">
           <label class="form-label" for="nm-to">To</label>
           <select class="form-select" id="nm-to" name="to">
-            <option value="owner">Dana Whitfield — Club Owner</option>
-            <option value="admin">Sam Okafor — Club Admin</option>
+            <option value="owner">${esc(staffName("owner"))} — Club Owner</option>
+            <option value="admin">${esc(staffName("admin"))} — Club Admin</option>
           </select>
         </div>
         <div class="col-md-6">
-          <label class="form-label" for="nm-player">About</label>
-          <select class="form-select" id="nm-player" name="playerId">
-            <option value="">General question</option>
-            ${myPlayers().map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${p.userId === MEMBER_ID ? " (me)" : ""}</option>`).join("")}
-          </select>
+          <label class="form-label" for="nm-about">Player's name <span class="text-muted">(optional)</span></label>
+          <input class="form-control" id="nm-about" name="about" maxlength="80" placeholder="Leave blank for a general question">
         </div>
         <div class="col-12">
           <label class="form-label" for="nm-subject">Subject</label>
@@ -1169,18 +1185,7 @@
 
   // ---------------------------------------------------------------- admin dashboard (staff only)
   // Admin Dashboard → Tournaments & Practices · Player Recognition · Communications
-  const VENUES = ["Canyon Crest Academy", "Canyon Crest Academy Gym", "Oak Valley Middle School", "Oak Valley Middle School Gym"];
-  // Defaults used when scheduling a session for a class.
-  const CLASS_DEFAULTS = {
-    general: { start: "16:00", end: "18:00", location: "Canyon Crest Academy", signup: false, eligibility: "junior" },
-    intermediate: { signup: false, eligibility: "junior" },
-    elite: { start: "16:00", end: "18:00", location: "Oak Valley Middle School", signup: false, eligibility: "junior" },
-    private: { start: "16:00", end: "17:00", location: "Oak Valley Middle School", signup: false, eligibility: "all" },
-    "adult-open": { start: "19:00", end: "21:00", location: "Oak Valley Middle School", signup: true, capacity: 16, eligibility: "adult" },
-    "adult-lessons": { signup: true, capacity: 12, eligibility: "adult" },
-    other: { eligibility: "all" },
-  };
-  const whoLabel = { junior: "Junior players", adult: "Adults", all: "Anyone (juniors and adults)" };
+  const VENUES = SPORT.venues;
   // Fictional names used to fill in the sample registrations on rosters.
   const SAMPLE_FIRST = ["Ava", "Ben", "Chloe", "Daniel", "Elena", "Felix", "Grace", "Hiro", "Isla", "Jonah", "Kai", "Lena", "Mateo", "Nora", "Owen",
     "Quinn", "Rosa", "Sami", "Theo", "Uma", "Vera", "Wes", "Yara", "Zane", "Arjun", "Bea", "Cody", "Dara", "Eli", "Farah"];
@@ -1188,7 +1193,7 @@
     "Iyer", "Walsh", "Moreno", "Fischer", "Adeyemi", "Larsen", "Ortiz"];
 
   const fld = (form, name) => form.querySelector(`[name="${name}"]`);
-  const adminOnly = () => '<div class="alert alert-warning">This area is for club staff. Switch the demo role to <strong>Admin</strong> to use it.</div>';
+  const adminOnly = () => `<div class="alert alert-warning">This area is for club staff. <a href="${SIGN_IN_URL}">Sign in</a> with an authorized Google account.</div>`;
   function adminCrumbs(...items) {
     return `<nav aria-label="breadcrumb"><ol class="breadcrumb small"><li class="breadcrumb-item"><a href="#/admin">Admin Dashboard</a></li>${items
       .map(([label, href]) => (href ? `<li class="breadcrumb-item"><a href="${href}">${label}</a></li>` : `<li class="breadcrumb-item active" aria-current="page">${label}</li>`))
@@ -1204,15 +1209,6 @@
     box.scrollIntoView({ block: "nearest" });
   }
 
-  function postAnnouncement({ category, title, body, eventId = null }) {
-    state.announcements.push({ id: uid("a"), category, title, body, eventId, authorId: ADMIN_ID, createdAt: isoNow() });
-  }
-
-  // Who may sign up for an event: "junior" | "adult" | "all".
-  function eligibilityOf(ev) {
-    if (ev.type === "tournament") return ev.adultEvent ? "adult" : "junior";
-    return ev.eligibility || CLASS_DEFAULTS[classOf(ev)?.id]?.eligibility || "adult";
-  }
 
   // Deterministic fictional names for an event's sample registrations (same names on every visit).
   function sampleRoster(ev) {
@@ -1233,7 +1229,7 @@
         name = `${SAMPLE_FIRST[Math.floor(rnd() * SAMPLE_FIRST.length)]} ${SAMPLE_LAST[Math.floor(rnd() * SAMPLE_LAST.length)]}`;
       }
       used.add(name);
-      out.push({ name, division: ev.divisions ? ev.divisions[i % ev.divisions.length] : null, by, when: "—", code: "—", sample: true });
+      out.push({ name, division: ev.divisions ? ev.divisions[i % ev.divisions.length] : null, by, contact: "—", when: "—", code: "—", sample: true });
     }
     return out;
   }
@@ -1255,13 +1251,15 @@
     return html;
   }
 
-  function setSignups(el, value) {
+  async function setSignups(el, value) {
     const ev = event(el.dataset.id);
     if (!ev || !isAdmin()) return;
-    if (value) ev.signups = value; else delete ev.signups;
-    save();
+    el.disabled = true;
+    let out;
+    try { out = await change("PUT", `${API}/admin/events/${encodeURIComponent(ev.id)}/signups`, { mode: value }); }
+    catch (err) { el.disabled = false; return toast(esc(err.errors[0]), "danger"); }
     const label = value === "closed" ? "sign-ups closed" : value === "open" ? "sign-ups opened" : "following the registration dates";
-    toast(`${esc(ev.title)}: ${label} (${esc(regStatus(ev).label)}).`, value === "closed" ? "secondary" : "success");
+    toast(`${esc(ev.title)}: ${label} (${esc(out.status)}).`, value === "closed" ? "secondary" : "success");
     render();
     if (el.closest("#eventModal")) openEventModal(ev.id);
   }
@@ -1309,7 +1307,7 @@
 
     const attention = [];
     visibleConvos().filter((c) => unreadIn(c)).forEach((c) => attention.push(
-      `<li class="list-group-item"><span class="badge text-bg-danger me-2">Unread</span><a href="#/messages/${esc(c.id)}">${esc(user(c.memberId).name)}: ${esc(c.subject)}</a></li>`));
+      `<li class="list-group-item"><span class="badge text-bg-danger me-2">Unread</span><a href="#/messages/${esc(c.id)}">${esc(c.contact.name)}: ${esc(c.subject)}</a></li>`));
     upcomingT.filter((e) => regStatus(e).open && e.deadline && parse(e.deadline) <= within(14)).forEach((e) => attention.push(
       `<li class="list-group-item"><span class="badge text-bg-primary me-2">Deadline</span><a href="#/admin/signups/${esc(e.id)}">${esc(e.title)}</a> — sign-ups close ${fmtShortDate(e.deadline)}</li>`));
     state.events.filter((e) => upcoming(e) && regStatus(e).key === "full").forEach((e) => attention.push(
@@ -1420,7 +1418,7 @@
           <div class="col-12">
             <label class="form-label fw-semibold" for="tf-divisions">Divisions <span class="fw-normal text-muted">(one per line)</span></label>
             <textarea class="form-control" id="tf-divisions" name="divisions" rows="4" required>${esc(v.divisions)}</textarea>
-            <div class="form-text">${locked.length ? `Divisions with registered players can't be removed: ${locked.map(esc).join(", ")}.` : "For example: U13 Singles, Mixed Doubles B."}</div>
+            <div class="form-text">${locked.length ? `Divisions with registered players can't be removed: ${locked.map(esc).join(", ")}.` : esc(SPORT.examples.divisions)}</div>
             <div class="invalid-feedback">Add at least one division.</div>
           </div>
           <div class="col-md-4">
@@ -1529,7 +1527,7 @@
           </div>
           <div class="col-md-6">
             <label class="form-label fw-semibold" for="pr-title">Session title <span class="fw-normal text-muted" id="pr-title-opt">${cls ? "(optional)" : ""}</span></label>
-            <input class="form-control" id="pr-title" name="title" maxlength="100" placeholder="${esc(cls ? cls.title : "e.g. Holiday Footwork Clinic")}" ${cls ? "" : "required"}>
+            <input class="form-control" id="pr-title" name="title" maxlength="100" placeholder="${esc(cls ? cls.title : SPORT.examples.sessionTitle)}" ${cls ? "" : "required"}>
             <div class="invalid-feedback">Add a title for this session.</div>
           </div>
           <div class="col-md-4">
@@ -1603,7 +1601,7 @@
     fld(f, "capacity").disabled = !d.signup;
     fld(f, "eligibility").value = d.eligibility || "all";
     const title = fld(f, "title");
-    title.placeholder = cls ? cls.title : "e.g. Holiday Footwork Clinic";
+    title.placeholder = cls ? cls.title : SPORT.examples.sessionTitle;
     title.required = !cls;
     const opt = document.getElementById("pr-title-opt");
     if (opt) opt.textContent = cls ? "(optional)" : "";
@@ -1651,7 +1649,7 @@
         <form data-form="practice-cancel" data-id="${esc(ev.id)}" novalidate>
           ${warn}
           <label class="form-label" for="pc-reason">Reason <span class="text-muted">(shown to members)</span></label>
-          <textarea class="form-control" id="pc-reason" name="reason" rows="2" maxlength="300" placeholder="e.g. The gym is reserved for a school event."></textarea>
+          <textarea class="form-control" id="pc-reason" name="reason" rows="2" maxlength="300" placeholder="${esc(SPORT.examples.cancelReason)}"></textarea>
           ${announce()}
           ${buttons("Cancel practice", "btn-danger")}
         </form>`);
@@ -1691,19 +1689,15 @@
       </div>`;
   }
 
-  function registeredBy(r) {
-    const p = player(r.playerId);
-    if (r.userId === MEMBER_ID) return p && p.userId === MEMBER_ID ? "Self" : `${user(MEMBER_ID).name} (guardian)`;
-    if (state.users[r.userId]) return state.users[r.userId].name;
-    return p && p.adult ? "Self" : "Parent/guardian";
-  }
+  const registeredBy = (r) => (r.participant.adult ? "Self" : `${r.guardianName || r.contact.name} (parent/guardian)`);
 
   function viewAdminRoster(id) {
     if (!isAdmin()) return adminOnly();
     const ev = event(id);
     if (!ev || !ev.requiresRegistration) return notFound("event");
     const demo = regsFor(ev.id).sort((a, b) => parse(a.createdAt) - parse(b.createdAt)).map((r) => ({
-      name: player(r.playerId)?.name || "Unknown player", division: r.division, by: registeredBy(r), when: fmtStamp(r.createdAt), code: r.code, sample: false,
+      name: r.participant.name, division: r.division, by: registeredBy(r), contact: [r.contact.email, r.contact.phone].filter(Boolean).join(" · "),
+      when: fmtStamp(r.createdAt), code: r.code, sample: false,
     }));
     const rows = [...demo, ...sampleRoster(ev)];
     const divCounts = ev.divisions ? ev.divisions.map((d) => [d, rows.filter((r) => r.division === d).length]) : [];
@@ -1718,8 +1712,8 @@
       </div></div>
       ${divCounts.length ? `<div class="mb-3">${divCounts.map(([d, n]) => `<span class="badge text-bg-light border me-1 mb-1">${esc(d)}: ${n}</span>`).join("")}</div>` : ""}
       ${rows.length ? `<div class="card shadow-sm"><div class="table-responsive"><table class="table table-sm align-middle mb-0" id="rosterTable">
-        <thead class="table-light"><tr><th scope="col">#</th><th scope="col">Player</th>${ev.divisions ? '<th scope="col">Division</th>' : ""}<th scope="col">Registered by</th><th scope="col">Signed up</th><th scope="col">Code</th></tr></thead>
-        <tbody>${rows.map((r, i) => `<tr class="${r.sample ? "text-muted" : ""}"><td>${i + 1}</td><td class="text-nowrap">${esc(r.name)} ${r.sample ? sampleTag : ""}</td>${ev.divisions ? `<td>${esc(r.division || "—")}</td>` : ""}<td>${esc(r.by)}</td><td class="text-nowrap">${esc(r.when)}</td><td><code>${esc(r.code)}</code></td></tr>`).join("")}</tbody>
+        <thead class="table-light"><tr><th scope="col">#</th><th scope="col">Player</th>${ev.divisions ? '<th scope="col">Division</th>' : ""}<th scope="col">Registered by</th><th scope="col">Contact</th><th scope="col">Signed up</th><th scope="col">Code</th></tr></thead>
+        <tbody>${rows.map((r, i) => `<tr class="${r.sample ? "text-muted" : ""}"><td>${i + 1}</td><td class="text-nowrap">${esc(r.name)} ${r.sample ? sampleTag : ""}</td>${ev.divisions ? `<td>${esc(r.division || "—")}</td>` : ""}<td>${esc(r.by)}</td><td class="text-break small">${esc(r.contact || "—")}</td><td class="text-nowrap">${esc(r.when)}</td><td><code>${esc(r.code)}</code></td></tr>`).join("")}</tbody>
       </table></div></div>` : '<p class="text-muted">No one has signed up yet.</p>'}`;
   }
 
@@ -1729,9 +1723,48 @@
     $("#navUnread").text(n).toggleClass("d-none", !n).attr("aria-label", `${n} unread messages`);
   }
 
+  function updateAuthControls() {
+    $("#viewSwitch").toggleClass("d-none", !session.admin);
+    $("#roleSwitch").val(isAdmin() ? "admin" : "member");
+    $("#adminSignInBtn").toggleClass("d-none", !!session.admin);
+    $("#signOutBtn").toggleClass("d-none", !session.admin);
+    $("#resetBtn").toggleClass("d-none", !isAdmin());
+  }
+
+  /** Private links: remember a conversation key, or open coaching notes shared with a family. */
+  function openPrivateLink([section, id, third, fourth]) {
+    if (section === "messages" && id && id !== "new" && third) {
+      remember("conversations", id, third);
+      $("#app").html('<p class="text-muted text-center py-5">Opening your conversation…</p>');
+      loadState().then(() => location.replace(`#/messages/${encodeURIComponent(id)}`), (err) => toast(esc(err.errors[0]), "danger"));
+      return true;
+    }
+    if (section === "recognition" && id && third === "notes" && fourth && notesCache[id] === undefined) {
+      $("#app").html('<p class="text-muted text-center py-5">Opening coaching notes…</p>');
+      api("POST", `${API}/spotlights/${encodeURIComponent(id)}/notes`, { key: fourth })
+        .then((out) => { notesCache[id] = out.coachingNotes; }, () => { notesCache[id] = null; toast("That private link isn't valid any more.", "secondary"); })
+        .then(render);
+      return true;
+    }
+    return false;
+  }
+
   function render() {
+    updateAuthControls();
+    if (!loaded) { $("#app").html('<p class="text-muted text-center py-5" id="loading">Loading club data…</p>'); return; }
     const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
     const [section, id] = parts;
+    if (!isAdmin() && openPrivateLink(parts)) return;
+    // Admin pages: signed-out visitors go to the sign-in page. (The data and actions behind
+    // these pages are protected on the server as well.)
+    if (section === "admin" && !isAdmin()) {
+      if (!session.admin) { location.replace(`${SIGN_IN_URL}?notice=signin`); return; }
+      state.role = "admin"; // signed-in admin who was previewing the member view
+      save();
+      $("#app").html('<p class="text-muted text-center py-5">Loading…</p>');
+      loadState().then(render, (err) => toast(esc(err.errors[0]), "danger"));
+      return;
+    }
     let html, nav;
     switch (section) {
       case undefined: case "home": html = viewHome(); nav = "home"; break;
@@ -1744,6 +1777,7 @@
         html = id === "new" ? viewSpotlightNew() : id ? viewSpotlight(id) : viewRecognition(); nav = "recognition"; break;
       case "announcements": html = id ? viewAnnouncement(id) : viewAnnouncements(); nav = "communications"; break;
       case "messages": html = viewMessages(id); nav = "communications"; break;
+      case "brand": html = viewBrand(); nav = "brand"; break;
       case "admin": {
         const [, sub, subId, extra] = parts;
         nav = "admin";
@@ -1761,8 +1795,9 @@
     $(".club-nav .nav-link").removeClass("active").removeAttr("aria-current");
     const activeTab = $(`.club-nav [data-nav="${nav}"]`).addClass("active").attr("aria-current", "page")[0];
     if (activeTab) { const bar = activeTab.parentElement; bar.scrollLeft = activeTab.offsetLeft - (bar.clientWidth - activeTab.offsetWidth) / 2; }
-    $("#roleSwitch").val(state.role);
-    $("#viewingAs").html(`Viewing as <strong>${esc(me().name)}</strong> — ${esc(me().title)} · <span class="text-danger">Demo with fictional sample data; changes are saved in this browser.</span>`);
+    $("#viewingAs").html(isAdmin()
+      ? `Signed in as <strong>${esc(session.name)}</strong> <span class="d-none d-sm-inline">(${esc(session.email)})</span> — Club Admin`
+      : `${session.admin ? "<strong>Previewing the public site</strong> (what visitors see) · " : ""}No account needed — anyone can register and message staff. Only admins sign in. · <span class="text-danger">Fictional sample data.</span>`);
     updateNavBadge();
     const thread = document.getElementById("threadMessages");
     if (thread) thread.scrollTop = thread.scrollHeight;
@@ -1783,29 +1818,43 @@
       state.ui.calMonth = ev.start.slice(0, 7); state.ui.selectedDay = ev.start.slice(0, 10);
       state.ui.filters[ev.type] = true; save(); go("#/calendar");
     },
-    "cancel-reg": (el) => {
+    "cancel-reg": async (el) => {
       const r = state.registrations.find((x) => x.id === el.dataset.id);
-      if (!r || !confirm(`Cancel ${player(r.playerId)?.name}'s registration for ${event(r.eventId)?.title}?`)) return;
-      state.registrations = state.registrations.filter((x) => x.id !== r.id);
-      save(); toast("Registration cancelled.", "secondary"); render();
+      if (!r || !confirm(`Cancel ${r.participant.name}'s registration for ${event(r.eventId)?.title}?`)) return;
+      try { await change("POST", `${API}/registrations/${encodeURIComponent(r.id)}/cancel`, { key: keyFor("registrations", r.id) }); }
+      catch (err) { return toast(esc(err.errors[0]), "danger"); }
+      toast("Registration cancelled.", "secondary");
+      render();
+    },
+    "copy-input": async (el) => {
+      const input = document.getElementById(el.dataset.target);
+      if (!input) return;
+      input.select();
+      try { await navigator.clipboard.writeText(input.value); toast("Link copied."); }
+      catch (e) { toast("Select the link and copy it.", "secondary"); }
     },
     "spot-edit": () => { state.spotlightDraft.previewing = false; save(); render(); },
     "spot-discard": () => { state.spotlightDraft = null; save(); },
-    "spot-publish": () => {
+    "spot-publish": async (el) => {
       const d = state.spotlightDraft;
       if (!d || !isAdmin()) return;
-      const s = { id: uid("s"), playerId: d.playerId, headline: d.headline, improved: d.improved, example: d.example,
-        nextSkill: d.nextSkill, coachingNotes: d.coachingNotes, authorId: ADMIN_ID, publishedAt: isoNow() };
-      state.spotlights.push(s);
+      el.disabled = true;
+      let out;
+      try {
+        out = await change("POST", `${API}/admin/spotlights`, {
+          playerId: d.playerId, headline: d.headline, improved: d.improved, example: d.example, nextSkill: d.nextSkill, coachingNotes: d.coachingNotes,
+        });
+      } catch (err) { el.disabled = false; return toast(esc(err.errors.join(" ")), "danger"); }
       state.spotlightDraft = null;
       save();
-      toast(`Spotlight for ${esc(player(s.playerId).name)} published.`);
-      go(`#/recognition/${s.id}`);
+      toast(`Spotlight for ${esc(player(d.playerId)?.name)} published.`);
+      go(`#/recognition/${out.spotlight.id}`);
     },
-    "delete-spotlight": (el) => {
+    "delete-spotlight": async (el) => {
       if (!isAdmin() || !confirm("Unpublish this spotlight?")) return;
-      state.spotlights = state.spotlights.filter((s) => s.id !== el.dataset.id);
-      save(); toast("Spotlight unpublished.", "secondary"); go("#/recognition");
+      try { await change("DELETE", `${API}/admin/spotlights/${encodeURIComponent(el.dataset.id)}`); } catch (err) { return toast(esc(err.errors[0]), "danger"); }
+      toast("Spotlight unpublished.", "secondary");
+      go("#/recognition");
     },
     "signups-open": (el) => setSignups(el, "open"),
     "signups-close": (el) => setSignups(el, "closed"),
@@ -1815,10 +1864,21 @@
     "practice-restore": (el) => openPracticeModal("restore", el.dataset.id),
     "admin-toggle-all": () => { state.ui.adminShowAll = !state.ui.adminShowAll; save(); render(); },
     "admin-signup-type": (el) => { state.ui.adminSignupType = el.dataset.type; save(); render(); },
-    "reset-demo": () => {
-      if (!confirm("Reset all demo data (registrations, messages, spotlights, announcements)?")) return;
-      try { localStorage.removeItem(STORE_KEY); } catch (e) { /* ignore */ }
-      load(); toast("Demo data reset."); go("#/");
+    "reset-demo": async () => {
+      if (!isAdmin() || !confirm("Reset all club data on the server back to the sample data? Every change made in the demo will be lost.")) return;
+      try { await change("POST", `${API}/admin/reset`); } catch (err) { return toast(esc(err.errors[0]), "danger"); }
+      toast("Demo data reset.");
+      go("#/admin");
+    },
+    "sign-out": async () => {
+      try {
+        await fetch("/auth/signout", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" });
+      } catch (e) { /* the redirect below still clears the view */ }
+      session = { admin: false, configured: session.configured };
+      state.role = "member";
+      state.spotlightDraft = null;
+      save();
+      location.replace(`${SIGN_IN_URL}?notice=signedout`);
     },
   };
 
@@ -1843,205 +1903,106 @@
       };
       save(); render(); window.scrollTo(0, 0);
     },
-    announcement(form) {
+    async announcement(form) {
       form.classList.add("was-validated");
       if (!form.checkValidity() || !isAdmin()) return;
       const fd = new FormData(form);
-      const a = {
-        id: uid("a"), title: fd.get("title").trim(), body: fd.get("body").trim(), category: fd.get("category"),
-        eventId: fd.get("eventId") || null, authorId: ADMIN_ID, createdAt: isoNow(),
-      };
-      if (!a.title || !a.body) return;
-      state.announcements.push(a);
-      const ev = a.eventId && event(a.eventId);
-      if (ev && fd.get("markCancelled") && ev.type === "practice") ev.cancelled = true;
-      save(); toast("Announcement posted to all members."); render();
-    },
-    // ----- admin: create or edit a tournament
-    tournament(form) {
-      if (!isAdmin()) return;
-      form.classList.add("was-validated");
-      if (!form.checkValidity()) return showFormErrors(form, ["Please fill in the highlighted fields."]);
-      const fd = new FormData(form);
-      const get = (n) => String(fd.get(n) || "").trim();
-      const ev = form.dataset.id ? event(form.dataset.id) : null;
-      const divisions = [...new Set(get("divisions").split("\n").map((d) => d.trim()).filter(Boolean))];
-      const start = `${get("date")}T${get("startTime")}`;
-      const end = `${get("date")}T${get("endTime")}`;
-      const errs = [];
-      if (!get("title")) errs.push("Add a tournament name.");
-      if (!divisions.length) errs.push("Add at least one division.");
-      if (get("endTime") <= get("startTime")) errs.push("The end time must be after the start time.");
-      if (get("deadline") > get("date")) errs.push("The registration deadline must be on or before the tournament date.");
-      if (get("opens") && get("opens") > get("deadline")) errs.push("Registration must open on or before the deadline.");
-      if (!ev && parse(start) < new Date()) errs.push("Choose a tournament date in the future.");
-      if (ev) {
-        const missing = [...new Set(regsFor(ev.id).map((r) => r.division).filter((d) => d && !divisions.includes(d)))];
-        if (missing.length) errs.push(`Players are registered in ${missing.join(", ")} — keep ${missing.length > 1 ? "those divisions" : "that division"}.`);
-      }
-      if (errs.length) return showFormErrors(form, errs);
-      const data = {
-        title: get("title"), start, end, location: get("location"), divisions, adultEvent: get("who") === "adult",
-        opensAt: get("opens") ? `${get("opens")}T00:00` : null, deadline: `${get("deadline")}T23:59`,
-        capacity: get("capacity") ? parseInt(get("capacity"), 10) : null, fee: get("fee") || null, details: get("details"),
-      };
-      let target = ev;
-      if (ev) Object.assign(ev, data);
-      else {
-        target = Object.assign({ id: uid("t"), type: "tournament", requiresRegistration: true, baseRegistered: 0 }, data);
-        state.events.push(target);
-      }
-      save();
-      toast(`${ev ? "Saved changes to" : "Created"} ${esc(target.title)}. <a href="#/tournaments/${esc(target.id)}" class="link-light fw-semibold">View public page</a>`);
-      go("#/admin/tournaments");
-    },
-    // ----- admin: schedule practice sessions (optionally weekly)
-    "schedule-practice"(form) {
-      if (!isAdmin()) return;
-      form.classList.add("was-validated");
-      if (!form.checkValidity()) return showFormErrors(form, ["Please fill in the highlighted fields."]);
-      const fd = new FormData(form);
-      const get = (n) => String(fd.get(n) || "").trim();
-      const cls = CLASSES.find((c) => c.id === get("classId"));
-      const title = get("title") || (cls ? cls.title : "");
-      const requires = !!fd.get("requiresSignup");
-      const errs = [];
-      if (!title) errs.push("Add a title for this session.");
-      if (get("endTime") <= get("startTime")) errs.push("The end time must be after the start time.");
-      if (parse(`${get("date")}T${get("startTime")}`) < new Date()) errs.push("Choose a date and time in the future.");
-      if (requires && !(parseInt(get("capacity"), 10) > 0)) errs.push("Enter how many spots are available.");
-      if (errs.length) return showFormErrors(form, errs);
-      const weeks = Math.min(12, Math.max(1, parseInt(get("weeks"), 10) || 1));
-      const eligibility = whoLabel[get("eligibility")] ? get("eligibility") : "all";
-      const base = new Date(`${get("date")}T12:00`);
-      const created = [];
-      for (let i = 0; i < weeks; i++) {
-        const d = addDays(base, 7 * i);
-        const ev = {
-          id: uid("pr"), type: "practice", classId: cls ? cls.id : null, title,
-          start: at(d, get("startTime")), end: at(d, get("endTime")), location: get("location"),
-          audience: cls ? cls.who : whoLabel[eligibility], details: get("details") || (cls ? cls.details : ""),
-          requiresRegistration: requires, capacity: requires ? parseInt(get("capacity"), 10) : null, baseRegistered: 0, eligibility,
-        };
-        state.events.push(ev);
-        created.push(ev);
-      }
-      const first = created[0];
-      const announce = !!fd.get("announce");
-      if (announce) {
-        postAnnouncement({
-          category: "change", eventId: first.id,
-          title: weeks > 1 ? `New: ${title} — ${weeks} weekly sessions` : `New session: ${title} on ${fmtShortDate(first.start)}`,
-          body: `${title} ${weeks > 1 ? `starts ${fmtDate(first.start)} and runs weekly for ${weeks} weeks` : `is on ${fmtDate(first.start)}`}, `
-            + `${fmtTime(first.start)} – ${fmtTime(first.end)} at ${first.location}.${requires ? " Sign-up is required — register from the calendar." : ""}`,
-        });
-      }
-      save();
-      toast(`Scheduled ${weeks} session${weeks > 1 ? "s" : ""} of ${esc(title)}${announce ? " and notified members" : ""}.`);
-      go("#/admin/practices");
-    },
-    // ----- admin: reschedule (date, time, place, spots)
-    "practice-reschedule"(form) {
-      const ev = event(form.dataset.id);
-      if (!ev || !isAdmin()) return;
-      form.classList.add("was-validated");
-      if (!form.checkValidity()) return showFormErrors(form, ["Please fill in the highlighted fields."]);
-      const fd = new FormData(form);
-      const get = (n) => String(fd.get(n) || "").trim();
-      const start = `${get("date")}T${get("startTime")}`;
-      const end = `${get("date")}T${get("endTime")}`;
-      const location = get("location");
-      const capacity = ev.requiresRegistration && get("capacity") ? parseInt(get("capacity"), 10) : ev.capacity;
-      const moved = start !== ev.start || end !== ev.end;
-      const relocated = location !== ev.location;
-      const resized = capacity !== ev.capacity;
-      const errs = [];
-      if (get("endTime") <= get("startTime")) errs.push("The end time must be after the start time.");
-      if (moved && parse(start) < new Date()) errs.push("Choose a date and time in the future.");
-      if (!moved && !relocated && !resized) errs.push("Nothing changed — choose a new date, time, location or number of spots.");
-      if (errs.length) return showFormErrors(form, errs);
-      const before = { start: ev.start, location: ev.location };
-      if (moved) {
-        if (!ev.rescheduledFrom) ev.rescheduledFrom = ev.start;
-        ev.start = start;
-        ev.end = end;
-        if (ev.rescheduledFrom === ev.start) delete ev.rescheduledFrom; // moved back to the original time
-      }
-      ev.location = location;
-      ev.capacity = capacity;
-      const notify = !!fd.get("announce") && (moved || relocated);
-      if (notify) {
-        const what = moved ? `is now on ${fmtDate(start)}, ${fmtTime(start)} – ${fmtTime(end)}${relocated ? ` at ${location}` : ""}` : `moves to ${location}`;
-        postAnnouncement({
-          category: "change", eventId: ev.id,
-          title: `${ev.title} on ${fmtShortDate(before.start)} ${moved ? "has been rescheduled" : "has a new location"}`,
-          body: `${ev.title} (originally ${fmtDate(before.start)} at ${fmtTime(before.start)}, ${before.location}) ${what}.${get("note") ? `\n\n${get("note")}` : ""}`,
-        });
-      }
-      save();
-      modal().hide();
-      toast(`${esc(ev.title)} updated${notify ? " and members notified" : ""}.`);
+      const ok = await submitForm(form, "POST", `${API}/admin/announcements`, {
+        title: fd.get("title"), body: fd.get("body"), category: fd.get("category"),
+        eventId: fd.get("eventId") || null, markCancelled: !!fd.get("markCancelled"),
+      });
+      if (!ok) return;
+      toast("Announcement posted to all members.");
       render();
     },
-    // ----- admin: cancel / restore a practice
-    "practice-cancel"(form) {
-      const ev = event(form.dataset.id);
-      if (!ev || !isAdmin()) return;
-      const fd = new FormData(form);
-      const reason = String(fd.get("reason") || "").trim();
-      ev.cancelled = true;
-      if (reason) ev.cancelReason = reason; else delete ev.cancelReason;
-      const announce = !!fd.get("announce");
-      if (announce) {
-        postAnnouncement({
-          category: "cancellation", eventId: ev.id,
-          title: `No ${ev.title} on ${fmtShortDate(ev.start)}`,
-          body: `${ev.title} on ${fmtDate(ev.start)} (${fmtTime(ev.start)}, ${ev.location}) is cancelled.${reason ? ` ${reason}` : ""}`,
-        });
-      }
-      save();
-      modal().hide();
-      toast(`${esc(ev.title)} on ${fmtShortDate(ev.start)} cancelled${announce ? " and members notified" : ""}.`, "secondary");
-      render();
-    },
-    "practice-restore"(form) {
-      const ev = event(form.dataset.id);
-      if (!ev || !isAdmin()) return;
-      const announce = !!new FormData(form).get("announce");
-      ev.cancelled = false;
-      delete ev.cancelReason;
-      if (announce) {
-        postAnnouncement({
-          category: "change", eventId: ev.id,
-          title: `${ev.title} on ${fmtShortDate(ev.start)} is back on`,
-          body: `Good news — ${ev.title} on ${fmtDate(ev.start)} at ${fmtTime(ev.start)} (${ev.location}) is back on the schedule.`,
-        });
-      }
-      save();
-      modal().hide();
-      toast(`${esc(ev.title)} on ${fmtShortDate(ev.start)} is back on${announce ? " and members notified" : ""}.`);
-      render();
-    },
-    "new-message"(form) {
+    async "new-message"(form) {
       form.classList.add("was-validated");
       if (!form.checkValidity() || isAdmin()) return;
       const fd = new FormData(form);
-      const c = {
-        id: uid("c"), memberId: MEMBER_ID, to: fd.get("to"), subject: fd.get("subject").trim(), playerId: fd.get("playerId") || null,
-        messages: [{ id: uid("m"), from: MEMBER_ID, at: isoNow(), body: fd.get("body").trim() }],
-        readAt: { member: isoNow(), staff: null },
-      };
-      state.conversations.push(c);
-      save(); toast("Message sent privately to club staff."); go(`#/messages/${c.id}`);
+      const btn = form.querySelector("[type=submit]");
+      btn.disabled = true;
+      let out;
+      try {
+        out = await api("POST", `${API}/conversations`, {
+          name: fd.get("name"), role: fd.get("role"), email: fd.get("email"), phone: fd.get("phone") || "",
+          to: fd.get("to"), about: fd.get("about") || "", subject: fd.get("subject"), body: fd.get("body"),
+        });
+      } catch (err) { btn.disabled = false; return showFormErrors(form, err.errors); }
+      remember("conversations", out.conversation.id, out.key); // this browser can now see replies
+      await loadState();
+      toast("Message sent privately to club staff.");
+      go(`#/messages/${out.conversation.id}`);
     },
-    reply(form) {
-      const c = state.conversations.find((x) => x.id === form.dataset.id);
-      const body = new FormData(form).get("body").trim();
-      if (!c || !body) { form.classList.add("was-validated"); return; }
-      const from = isAdmin() ? ADMIN_ID : MEMBER_ID;
-      c.messages.push({ id: uid("m"), from, at: isoNow(), body });
-      c.readAt[isAdmin() ? "staff" : "member"] = isoNow();
-      save(); toast(isAdmin() ? "Reply sent." : "Message sent."); render();
+    async reply(form) {
+      const body = String(new FormData(form).get("body") || "").trim();
+      if (!body) { form.classList.add("was-validated"); return; }
+      const id = encodeURIComponent(form.dataset.id);
+      const ok = await submitForm(form, "POST", isAdmin() ? `${API}/admin/conversations/${id}/messages` : `${API}/conversations/${id}/messages`,
+        isAdmin() ? { body } : { body, key: keyFor("conversations", form.dataset.id) });
+      if (!ok) return;
+      toast(isAdmin() ? "Reply sent." : "Message sent.");
+      render();
+    },
+    // ----- admin: create or edit a tournament (validated on the server)
+    async tournament(form) {
+      if (!isAdmin()) return;
+      form.classList.add("was-validated");
+      if (!form.checkValidity()) return showFormErrors(form, ["Please fill in the highlighted fields."]);
+      const id = form.dataset.id;
+      const out = await submitForm(form, id ? "PUT" : "POST", id ? `${API}/admin/tournaments/${encodeURIComponent(id)}` : `${API}/admin/tournaments`,
+        Object.fromEntries(new FormData(form)));
+      if (!out) return;
+      toast(`${id ? "Saved changes to" : "Created"} ${esc(out.event.title)}. <a href="#/tournaments/${esc(out.event.id)}" class="link-light fw-semibold">View public page</a>`);
+      go("#/admin/tournaments");
+    },
+    // ----- admin: schedule practice sessions
+    async "schedule-practice"(form) {
+      if (!isAdmin()) return;
+      form.classList.add("was-validated");
+      if (!form.checkValidity()) return showFormErrors(form, ["Please fill in the highlighted fields."]);
+      const fd = new FormData(form);
+      const body = { ...Object.fromEntries(fd), requiresSignup: !!fd.get("requiresSignup"), announce: !!fd.get("announce") };
+      const out = await submitForm(form, "POST", `${API}/admin/practices`, body);
+      if (!out) return;
+      toast(`Scheduled ${out.created} session${out.created > 1 ? "s" : ""} of ${esc(out.title)}${out.announced ? " and notified members" : ""}.`);
+      go("#/admin/practices");
+    },
+    // ----- admin: reschedule / cancel / restore a practice
+    async "practice-reschedule"(form) {
+      if (!isAdmin()) return;
+      form.classList.add("was-validated");
+      if (!form.checkValidity()) return showFormErrors(form, ["Please fill in the highlighted fields."]);
+      const fd = new FormData(form);
+      const title = event(form.dataset.id)?.title || "Practice";
+      const out = await submitForm(form, "POST", `${API}/admin/practices/${encodeURIComponent(form.dataset.id)}/reschedule`,
+        { ...Object.fromEntries(fd), announce: !!fd.get("announce") });
+      if (!out) return;
+      modal().hide();
+      toast(`${esc(title)} updated${out.notified ? " and members notified" : ""}.`);
+      render();
+    },
+    async "practice-cancel"(form) {
+      if (!isAdmin()) return;
+      const fd = new FormData(form);
+      const ev = event(form.dataset.id);
+      const label = ev ? `${ev.title} on ${fmtShortDate(ev.start)}` : "Practice";
+      const out = await submitForm(form, "POST", `${API}/admin/practices/${encodeURIComponent(form.dataset.id)}/cancel`,
+        { reason: fd.get("reason") || "", announce: !!fd.get("announce") });
+      if (!out) return;
+      modal().hide();
+      toast(`${esc(label)} cancelled${out.notified ? " and members notified" : ""}.`, "secondary");
+      render();
+    },
+    async "practice-restore"(form) {
+      if (!isAdmin()) return;
+      const ev = event(form.dataset.id);
+      const label = ev ? `${ev.title} on ${fmtShortDate(ev.start)}` : "Practice";
+      const out = await submitForm(form, "POST", `${API}/admin/practices/${encodeURIComponent(form.dataset.id)}/restore`,
+        { announce: !!new FormData(form).get("announce") });
+      if (!out) return;
+      modal().hide();
+      toast(`${esc(label)} is back on${out.notified ? " and members notified" : ""}.`);
+      render();
     },
   };
 
@@ -2053,8 +2014,8 @@
     $.get("/components/footer.html", (h) => $("#footer").html(h.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<\/?(body|html)>/gi, "")));
   }
 
-  $(function () {
-    load();
+  $(async function () {
+    loadPrefs();
     loadSharedComponents();
 
     document.addEventListener("click", (e) => {
@@ -2075,6 +2036,11 @@
         save(); render();
       }
       if (e.target.id === "pr-class") applyClassDefaults(e.target);
+      if (e.target.id === "regType") {
+        const junior = e.target.value === "junior";
+        $("#regGuardianGroup").toggleClass("d-none", !junior);
+        $("#regGuardian").prop("required", junior);
+      }
       if (e.target.id === "pr-signup") fld(e.target.form, "capacity").disabled = !e.target.checked;
       if (e.target.dataset.ui) { state.ui[e.target.dataset.ui] = e.target.value; save(); render(); }
     });
@@ -2083,19 +2049,31 @@
       if ((e.key === "Enter" || e.key === " ") && e.target.classList?.contains("cal-cell")) { e.preventDefault(); e.target.click(); }
     });
 
-    $("#roleSwitch").on("change", function () {
-      state.role = this.value;
+    // View switch (only shown to a signed-in admin): it can switch to the member preview,
+    // but the Admin view needs the server-side session — the switch can't grant access.
+    $("#roleSwitch").on("change", async function () {
+      const want = this.value === "admin" ? "admin" : "member";
+      if (want === "admin" && !session.admin) { location.href = SIGN_IN_URL; return; }
+      state.role = want;
       save();
-      toast(this.value === "admin"
-        ? 'Switched to Admin view. <a href="#/admin" class="link-light fw-semibold">Open the Admin Dashboard</a>'
-        : "Switched to Adult Member view.", "dark");
-      // Return to the inbox so the new role sees its unread indicators (and never another family's thread).
+      try { await loadState(); } catch (err) { return toast(esc(err.errors[0]), "danger"); }
+      toast(want === "admin"
+        ? 'Showing the Admin view. <a href="#/admin" class="link-light fw-semibold">Open the Admin Dashboard</a>'
+        : "Previewing the public site, as visitors see it.", "dark");
+      // Return to the inbox so the new view sees its unread indicators (and never another family's thread).
       if (location.hash.startsWith("#/messages/")) go("#/messages");
-      else if (location.hash.startsWith("#/admin") && this.value !== "admin") go("#/");
+      else if (location.hash.startsWith("#/admin") && want !== "admin") go("#/");
       else render();
     });
 
     window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
+    render(); // loading state
+    await refreshSession();
+    if (session.admin && location.hash.startsWith("#/admin")) state.role = "admin";
+    try { await loadState(); } catch (err) {
+      $("#app").html(`<div class="alert alert-danger">${esc(err.errors[0])}</div>`);
+      return;
+    }
     render();
   });
 })();

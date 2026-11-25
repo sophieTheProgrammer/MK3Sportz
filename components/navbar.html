@@ -21,12 +21,27 @@
 
   <div class="collapse navbar-collapse" id="navbarNav">
     <div class="navbar-nav ms-auto gap-3">
-      <a
-        class="nav-link text-dark"
-        href="/sports/pickleball.html"
-        data-json="pickleball"
-        >Youth Pickleball</a
-      >
+      <div class="nav-item dropdown">
+        <a
+          class="nav-link text-dark dropdown-toggle"
+          href="/pickleball/"
+          role="button"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+          >Pickleball</a
+        >
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li>
+            <a class="dropdown-item" href="/pickleball/"
+              >Pickleball Club
+              <span class="d-block small text-muted">Calendar, tournaments &amp; sign-ups</span></a
+            >
+          </li>
+          <li><hr class="dropdown-divider" /></li>
+          <li><a class="dropdown-item" href="/sports/pickleball.html">Youth Pickleball</a></li>
+          <li><a class="dropdown-item" href="/sports/adultpickleball.html">Adult Pickleball</a></li>
+        </ul>
+      </div>
       <a
         class="nav-link text-dark"
         href="/sports/basketball.html"
@@ -44,12 +59,6 @@
         href="/badminton/"
         data-json="basketball"
         >Badminton Club</a
-      >
-            <a
-        class="nav-link text-dark"
-        href="/sports/adultpickleball.html"
-        data-json="basketball"
-        >Adult Pickleball</a
       >
     </div>
   </div>
